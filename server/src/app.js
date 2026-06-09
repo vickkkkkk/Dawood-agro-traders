@@ -30,7 +30,16 @@ const app = express();
 // --- Global Middleware ---
 
 // Security headers
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+        'upgrade-insecure-requests': null,
+      },
+    },
+  })
+);
 
 // CORS
 app.use(
