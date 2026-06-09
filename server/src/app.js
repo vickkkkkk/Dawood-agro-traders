@@ -79,7 +79,7 @@ if (config.nodeEnv === 'production') {
   app.use(express.static(clientDistPath));
 
   // Catch-all for SPA routing
-  app.get('(.*)', (req, res) => {
+  app.get(/.*/, (req, res) => {
     res.sendFile(join(clientDistPath, 'index.html'));
   });
 }
