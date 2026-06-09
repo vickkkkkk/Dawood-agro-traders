@@ -1,0 +1,173 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  role      String   @default("CASHIER") // ADMIN, MANAGER, CASHIER
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bills Bill[]
+
+  @@map("users")
+}
+
+model Category {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+
+  products Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id            Int       @id @default(autoincrement())
+  name          String
+  sku           String    @unique
+  categoryId    Int
+  purchasePrice Float
+  salePrice     Float
+  stockQty      Float     @default(0)
+  unit          String    @default("bags")
+  lowStockAlert Float     @default(10)
+  expiryDate    DateTime?
+  batchNo       String?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  category      Category       @relation(fields: [categoryId], references: [id])
+  billItems     BillItem[]
+  purchaseItems PurchaseItem[]
+
+  @@map("products")
+}
+
+model Supplier {
+  id        Int      @id @default(autoincrement())
+  name      String
+  phone     String?
+  address   String?
+  company   String?
+  createdAt DateTime @default(now())
+
+  purchases Purchase[]
+
+  @@map("suppliers")
+}
+
+model Customer {
+  id            Int      @id @default(autoincrement())
+  name          String
+  phone         String   @unique
+  address       String?
+  creditBalance Float    @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  bills              Bill[]
+  creditTransactions CreditTransaction[]
+
+  @@map("customers")
+}
+
+model Bill {
+  id            Int           @id @default(autoincrement())
+  billNo        String        @unique
+  customerId    Int?
+  userId        Int
+  subtotal      Float
+  discount      Float         @default(0)
+  total         Float
+  paymentMethod String        // CASH, JAZZCASH, EASYPAISA, BANK_TRANSFER, CREDIT
+  paymentStatus String        // PAID, CREDIT
+  amountPaid    Float
+  creditAmount  Float         @default(0)
+  isVoid        Boolean       @default(false)
+  hasReturns    Boolean       @default(false)
+  billDate      DateTime      @default(now())
+  createdAt     DateTime      @default(now())
+
+  customer Customer?  @relation(fields: [customerId], references: [id])
+  user     User       @relation(fields: [userId], references: [id])
+  items    BillItem[]
+  creditTransactions CreditTransaction[]
+
+  @@map("bills")
+}
+
+model BillItem {
+  id        Int     @id @default(autoincrement())
+  billId    Int
+  productId Int
+  quantity  Float
+  returnedQuantity Float @default(0)
+  unitPrice Float
+  total     Float
+
+  bill    Bill    @relation(fields: [billId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("bill_items")
+}
+
+model Purchase {
+  id           Int            @id @default(autoincrement())
+  grnNo        String         @unique
+  supplierId   Int
+  userId       Int
+  total        Float
+  status       String         @default("RECEIVED") // RECEIVED, PENDING
+  purchaseDate DateTime       @default(now())
+  createdAt    DateTime       @default(now())
+
+  supplier Supplier       @relation(fields: [supplierId], references: [id])
+  items    PurchaseItem[]
+
+  @@map("purchases")
+}
+
+model PurchaseItem {
+  id         Int       @id @default(autoincrement())
+  purchaseId Int
+  productId  Int
+  quantity   Float
+  unitPrice  Float
+  total      Float
+  batchNo    String?
+  expiryDate DateTime?
+
+  purchase Purchase @relation(fields: [purchaseId], references: [id])
+  product  Product  @relation(fields: [productId], references: [id])
+
+  @@map("purchase_items")
+}
+
+model CreditTransaction {
+  id              Int        @id @default(autoincrement())
+  customerId      Int
+  billId          Int?
+  type            String     // CREDIT, PAYMENT
+  amount          Float
+  description     String?
+  transactionDate DateTime   @default(now())
+  createdAt       DateTime   @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id])
+  bill     Bill?    @relation(fields: [billId], references: [id])
+
+  @@map("credit_transactions")
+}
