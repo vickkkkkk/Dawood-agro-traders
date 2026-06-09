@@ -8,7 +8,7 @@ This document explains how to deploy the POS system onto a low-cost Hetzner VPS 
 
 The system is configured as a single-container service:
 1. **React App** is built and served as static content directly by the **Node.js/Express Server**.
-2. **PostgreSQL** runs alongside in a second Docker container with persistent volume storage.
+2. **SQLite** is used as the database, running inside the container with a persistent Docker volume to store your POS system data safely.
 3. **Caddy** acts as a reverse proxy on the host VPS, automatically obtaining and renewing SSL certificates for your Namecheap domain.
 
 Total Server Cost: **€4.49 / month** (Hetzner Cloud VPS CX22 - 2 vCPU, 4GB RAM).
@@ -79,7 +79,7 @@ Create a production `.env` file in the project root:
 
 ```bash
 # /var/www/dawood-agro-traders/.env
-DATABASE_URL="postgresql://postgres:postgres_secure_pass@db:5432/dawood_agro_traders?schema=public"
+DATABASE_URL="file:./dev.db"
 JWT_SECRET="generate_a_very_long_secure_random_string_here"
 JWT_EXPIRES_IN="24h"
 PORT=5000
@@ -115,7 +115,7 @@ docker compose logs -f app
 Run the database migrations and seed the default admin account:
 
 ```bash
-docker compose exec app npx prisma migrate deploy
+docker compose exec app npx prisma db push
 docker compose exec app npm run seed
 ```
 
