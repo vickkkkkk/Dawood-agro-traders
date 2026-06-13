@@ -798,8 +798,8 @@ const POS = () => {
             >
               <div className="text-center space-y-1 mb-4 border-b border-dashed border-gray-400 pb-3">
                 <h2 className="text-sm font-bold tracking-wide">DAWOOD AGRO TRADERS</h2>
-                <p className="text-[10px] text-gray-600">Old Grain Market, Vehari, Pakistan</p>
-                <p className="text-[10px] text-gray-600">Phone: 0300-1234567</p>
+                <p className="text-[10px] text-gray-600">Jatoi Road  Near Zrai Bank Shah Jamal</p>
+                <p className="text-[10px] text-gray-600">Phone: 0340-0736201, 0302-7338805</p>
                 <p className="text-[10px] font-mono mt-2 text-gray-700">INVOICE: {latestBill.billNo}</p>
                 <p className="text-[9px] text-gray-500">Date: {new Date(latestBill.billDate).toLocaleString('en-PK')}</p>
               </div>
