@@ -1,4 +1,5 @@
 import { useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 const Modal = ({
@@ -11,12 +12,12 @@ const Modal = ({
   id,
 }) => {
   const sizeClasses = {
-    sm: 'max-w-md',
-    md: 'max-w-lg',
-    lg: 'max-w-2xl',
-    xl: 'max-w-4xl',
-    '2xl': 'max-w-5xl',
-    full: 'max-w-6xl',
+    sm: 'w-[calc(100vw-32px)] sm:max-w-md',
+    md: 'w-[calc(100vw-32px)] sm:max-w-lg',
+    lg: 'w-[calc(100vw-32px)] sm:max-w-2xl',
+    xl: 'w-[calc(100vw-32px)] sm:max-w-4xl',
+    '2xl': 'w-[calc(100vw-32px)] sm:max-w-5xl',
+    full: 'w-[calc(100vw-32px)] sm:max-w-6xl',
   };
 
   const handleEscape = useCallback((e) => {
@@ -36,18 +37,26 @@ const Modal = ({
 
   if (!isOpen) return null;
 
-  return (
-    <div id={id} className="modal-overlay">
+  return createPortal(
+    <div 
+      id={id} 
+      className="modal-overlay"
+      onClick={onClose}
+    >
       {/* Modal Content */}
-      <div className={`modal-content ${sizeClasses[size] || ''}`}>
+      <div 
+        className={`modal-content ${sizeClasses[size] || ''} flex flex-col max-h-[calc(100vh-48px)] overflow-hidden`}
+        onClick={(e) => e.stopPropagation()}
+      >
 
         {/* Header */}
         {title && (
-          <div className="modal-header-premium">
+          <div className="modal-header-premium shrink-0">
             <h3 className="modal-title">{title}</h3>
             <button
               onClick={onClose}
               className="btn-close-premium"
+              type="button"
             >
               <X size={20} />
             </button>
@@ -55,18 +64,19 @@ const Modal = ({
         )}
 
         {/* Body */}
-        <div className="modal-body-premium max-h-[70vh] overflow-y-auto">
+        <div className="modal-body-premium flex-1 overflow-y-auto">
           {children}
         </div>
 
         {/* Footer */}
         {footer && (
-          <div className="modal-footer-premium flex items-center justify-end gap-3">
+          <div className="modal-footer-premium flex items-center justify-end gap-3 shrink-0">
             {footer}
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

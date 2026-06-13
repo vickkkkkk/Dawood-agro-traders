@@ -10,6 +10,7 @@ import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
+import SearchBar from '../components/ui/SearchBar';
 import { formatCurrency } from '../utils/formatCurrency';
 import { formatDate, formatDateTime } from '../utils/formatDate';
 
@@ -180,13 +181,11 @@ const Customers = () => {
       <Card compact>
         <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
           <div className="w-full sm:w-80">
-            <Input
+            <SearchBar
               id="customers-search"
-              placeholder="Search by name or phone..."
-              icon={Search}
-              className="pos-filter-input pos-filter-input-icon"
+              placeholder="Search customers by name or phone..."
               value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              onChange={(val) => { setSearch(val); setPage(1); }}
             />
           </div>
           <Button
@@ -214,24 +213,24 @@ const Customers = () => {
           {customers.length > 0 ? (
             customers.map((c) => (
               <tr key={c.id} className="border-b border-white/5 hover:bg-white/[0.03] transition-colors">
-                <td className="px-7 py-4">
+                <td className="px-4 py-3">
                   <p className="font-semibold text-white text-sm">{c.name}</p>
                 </td>
-                <td className="px-7 py-4 text-sm text-slate-300">
+                <td className="px-4 py-3 text-sm text-slate-300">
                   {c.phone}
                 </td>
-                <td className="px-7 py-4 text-sm text-slate-400 truncate max-w-[200px]">
+                <td className="px-4 py-3 text-sm text-slate-400 truncate max-w-[200px]">
                   {c.address || '-'}
                 </td>
-                <td className="px-7 py-4">
+                <td className="px-4 py-3">
                   <span className={`text-sm font-bold ${parseFloat(c.creditBalance) > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
                     {formatCurrency(c.creditBalance)}
                   </span>
                 </td>
-                <td className="px-7 py-4 text-sm text-slate-500">
+                <td className="px-4 py-3 text-sm text-slate-500">
                   {formatDate(c.createdAt)}
                 </td>
-                <td className="px-7 py-4">
+                <td className="px-4 py-3">
                   <div className="flex gap-2">
                     <Button
                       id={`btn-view-${c.phone}`}

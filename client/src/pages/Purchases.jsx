@@ -19,6 +19,7 @@ import Select from '../components/ui/Select';
 import DatePicker from '../components/ui/DatePicker';
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
+import SearchBar from '../components/ui/SearchBar';
 import { formatCurrency } from '../utils/formatCurrency';
 import { formatDateTime, formatDate } from '../utils/formatDate';
 
@@ -276,13 +277,11 @@ const Purchases = () => {
       <Card compact>
         <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
           <div className="w-full sm:w-80">
-            <Input
+            <SearchBar
               id="purchases-search"
-              placeholder="Search by GRN Number..."
-              icon={Search}
-              className="pos-filter-input pos-filter-input-icon"
+              placeholder="Search by GRN number..."
               value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              onChange={(val) => { setSearch(val); setPage(1); }}
             />
           </div>
           <div className="flex gap-2 w-full sm:w-auto">
@@ -319,25 +318,25 @@ const Purchases = () => {
           {purchases.length > 0 ? (
             purchases.map((pur) => (
               <tr key={pur.id} className="border-b border-white/5 hover:bg-white/[0.03] transition-colors">
-                <td className="px-7 py-4">
+                <td className="px-4 py-3">
                   <span className="font-mono text-sm text-emerald-400 font-semibold">{pur.grnNo}</span>
                 </td>
-                <td className="px-7 py-4 text-sm text-slate-300">
+                <td className="px-4 py-3 text-sm text-slate-300">
                   {formatDateTime(pur.purchaseDate)}
                 </td>
-                <td className="px-7 py-4 text-sm text-slate-300">
+                <td className="px-4 py-3 text-sm text-slate-300">
                   {pur.supplier?.name} {pur.supplier?.company ? `(${pur.supplier.company})` : ''}
                 </td>
-                <td className="px-7 py-4 text-sm text-slate-400">
+                <td className="px-4 py-3 text-sm text-slate-400">
                   {pur.items?.length || 0} items
                 </td>
-                <td className="px-7 py-4 text-sm font-bold text-white">
+                <td className="px-4 py-3 text-sm font-bold text-white">
                   {formatCurrency(pur.total)}
                 </td>
-                <td className="px-7 py-4 text-xs">
+                <td className="px-4 py-3 text-xs">
                   <Badge variant="success">RECEIVED</Badge>
                 </td>
-                <td className="px-7 py-4">
+                <td className="px-4 py-3">
                   <Button
                     id={`btn-view-pur-${pur.grnNo}`}
                     variant="secondary"
@@ -636,7 +635,7 @@ const Purchases = () => {
                     <div>
                       <p className="font-semibold text-white">{item.product?.name || `Product #${item.productId}`}</p>
                       <p className="text-xs text-slate-500">
-                        Cost: {formatCurrency(item.unitPrice)} | Qty: {item.quantity} bags
+                        Cost: {formatCurrency(item.unitPrice)} | Qty: {item.quantity} {item.product?.unit || 'bags'}
                         {item.batchNo && ` | Batch: ${item.batchNo}`}
                       </p>
                     </div>

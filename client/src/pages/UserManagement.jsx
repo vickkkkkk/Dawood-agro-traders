@@ -10,6 +10,7 @@ import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
+import SearchBar from '../components/ui/SearchBar';
 import { useAuth } from '../context/AuthContext';
 import { ROLE_COLORS, ROLE_LABELS } from '../utils/constants';
 import { formatDate } from '../utils/formatDate';
@@ -217,13 +218,11 @@ const UserManagement = () => {
       <Card compact>
         <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
           <div className="w-full sm:w-80">
-            <Input
+            <SearchBar
               id="users-search"
               placeholder="Search users by name or email..."
-              icon={Search}
-              className="pos-filter-input pos-filter-input-icon"
               value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              onChange={(val) => { setSearch(val); setPage(1); }}
             />
           </div>
           <Button
@@ -253,7 +252,7 @@ const UserManagement = () => {
               const rColors = ROLE_COLORS[u.role] || ROLE_COLORS.CASHIER;
               return (
                 <tr key={u.id} className="border-b border-white/5 hover:bg-white/[0.03] transition-colors">
-                  <td className="px-7 py-4">
+                  <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white">
                         <User size={16} />
@@ -264,23 +263,23 @@ const UserManagement = () => {
                       </div>
                     </div>
                   </td>
-                  <td className="px-7 py-4 text-sm text-slate-300">
+                  <td className="px-4 py-3 text-sm text-slate-300">
                     {u.email}
                   </td>
-                  <td className="px-7 py-4">
+                  <td className="px-4 py-3">
                     <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${rColors.bg} ${rColors.text}`}>
                       {ROLE_LABELS[u.role]}
                     </span>
                   </td>
-                  <td className="px-7 py-4">
+                  <td className="px-4 py-3">
                     <Badge variant={u.isActive ? 'success' : 'danger'}>
                       {u.isActive ? 'Active' : 'Disabled'}
                     </Badge>
                   </td>
-                  <td className="px-7 py-4 text-sm text-slate-500">
+                  <td className="px-4 py-3 text-sm text-slate-500">
                     {formatDate(u.createdAt)}
                   </td>
-                  <td className="px-7 py-4">
+                  <td className="px-4 py-3">
                     <div className="flex gap-2">
                       <Button
                         id={`btn-edit-user-${u.email}`}

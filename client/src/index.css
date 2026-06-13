@@ -247,12 +247,12 @@ input:-webkit-autofill:active {
 
 /* Main content area padding — generous breathing room */
 .app-main-content {
-  padding: 32px !important;
+  padding: 24px !important;
 }
 
 @media (max-width: 768px) {
   .app-main-content {
-    padding: 20px !important;
+    padding: 16px !important;
   }
 
   .app-header-content {
@@ -261,14 +261,20 @@ input:-webkit-autofill:active {
   }
 }
 
-/* Standard card padding — 28px for comfortable internal spacing */
+@media (max-width: 480px) {
+  .app-main-content {
+    padding: 12px !important;
+  }
+}
+
+/* Standard card padding — 24px for comfortable internal spacing */
 .card-padded {
-  padding: 28px !important;
+  padding: 24px !important;
 }
 
 /* Compact card padding — for filter bars and toolbars */
 .card-compact {
-  padding: 20px !important;
+  padding: 16px !important;
 }
 
 /* ===========================
@@ -333,8 +339,8 @@ input:-webkit-autofill:active {
    Uniform design for search/select on POS and filter bars
    =========================== */
 .pos-filter-input {
-  height: 48px !important;
-  border-radius: 16px !important;
+  height: 38px !important;
+  border-radius: 6px !important;
   background: var(--bg-input) !important;
   border: 1px solid var(--border-input) !important;
   padding-top: 0 !important;
@@ -346,7 +352,7 @@ input:-webkit-autofill:active {
 .pos-filter-input:focus {
   border-color: rgba(16, 185, 129, 0.5) !important;
   outline: none !important;
-  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2) !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2) !important;
 }
 
 /* Left padding for inputs with a search icon */
@@ -362,10 +368,10 @@ input:-webkit-autofill:active {
 
 /* Align filter buttons with the 48px inputs */
 .pos-filter-btn {
-  height: 48px !important;
+  height: 38px !important;
   padding-top: 0 !important;
   padding-bottom: 0 !important;
-  border-radius: 16px !important;
+  border-radius: 6px !important;
 }
 
 /* ===========================
@@ -377,7 +383,7 @@ input:-webkit-autofill:active {
   width: 100%;
   background-color: var(--bg-input);
   border: 1px solid var(--border-input);
-  border-radius: 12px;
+  border-radius: 6px !important;
   font-size: 14px;
   color: var(--text-primary);
   padding-top: 10px;
@@ -388,8 +394,8 @@ input:-webkit-autofill:active {
 
 .input-field-custom:focus {
   outline: none;
-  border-color: rgba(0, 229, 204, 0.6);
-  box-shadow: 0 0 0 2px rgba(0, 229, 204, 0.15);
+  border-color: rgba(16, 185, 129, 0.5) !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2) !important;
 }
 
 .input-field-custom::placeholder {
@@ -625,18 +631,10 @@ textarea {
 .app-container {
   max-width: 1280px;
   margin: 0 auto;
-  padding: 1rem;
+  padding: 0 !important;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
-  min-height: 100vh;
-}
-
-@media (min-width: 768px) {
-  .app-container {
-    padding: 2rem 1.5rem;
-    gap: 2rem;
-  }
+  gap: 24px !important;
 }
 
 /* Header Section */
@@ -713,15 +711,15 @@ textarea {
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-color);
-  border-radius: 0.75rem;
+  border-radius: 8px !important;
   padding: 1rem;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 @media (min-width: 768px) {
   .glass-card {
-    border-radius: 1rem;
+    border-radius: 8px !important;
     padding: 1.5rem;
   }
 }
@@ -965,9 +963,9 @@ textarea {
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-color);
-  border-radius: 1.25rem;
+  border-radius: 8px !important;
   padding: 1.25rem;
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.15);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
 }
@@ -1091,37 +1089,7 @@ textarea {
   z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-  background: var(--bg-group);
-  border: 1px solid var(--border-group);
-  border-radius: 0.75rem;
-  padding: 0.85rem;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.form-group-premium:focus-within {
-  background: var(--bg-group-focus);
-  border-color: var(--border-group-focus);
-}
-
-.form-group-premium.date-group:focus-within {
-  border-color: rgba(14, 165, 233, 0.4);
-}
-
-.form-group-premium.sales-group:focus-within {
-  border-color: rgba(16, 185, 129, 0.4);
-}
-
-.form-group-premium.purchases-group:focus-within {
-  border-color: rgba(239, 68, 68, 0.4);
-}
-
-.form-group-premium.expenses-group:focus-within {
-  border-color: rgba(245, 158, 11, 0.4);
-}
-
-.form-group-premium.notes-group:focus-within {
-  border-color: rgba(168, 85, 247, 0.4);
+  gap: 6px !important;
 }
 
 .form-label-premium {
@@ -1143,7 +1111,7 @@ textarea {
   width: 100%;
   background: var(--bg-input);
   border: 1px solid var(--border-input);
-  border-radius: 0.5rem;
+  border-radius: 6px !important;
   padding: 0.6rem 0.75rem;
   color: var(--text-primary);
   font-size: 0.9rem;
@@ -1163,6 +1131,7 @@ textarea {
 .form-input-premium:focus {
   outline: none;
   background: var(--bg-input-focus);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2) !important;
 }
 
 .form-group-premium.date-group .form-input-premium:focus {
@@ -1740,6 +1709,9 @@ textarea {
   z-index: 1000;
   padding: 1rem;
   box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .modal-content {
@@ -1747,8 +1719,8 @@ textarea {
   max-width: 500px;
   background: linear-gradient(135deg, var(--modal-bg-gradient-from), var(--modal-bg-gradient-to));
   border: 1px solid var(--modal-border);
-  border-radius: 1.25rem;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25), inset 0 0 15px rgba(255, 255, 255, 0.02);
+  border-radius: 8px !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15), inset 0 0 15px rgba(255, 255, 255, 0.02) !important;
   overflow: hidden;
   padding: 1.5rem !important;
   animation: modalZoomIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;

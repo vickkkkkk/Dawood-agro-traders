@@ -60,6 +60,7 @@ router.put(
     body('purchasePrice').optional().isFloat({ min: 0 }).withMessage('Purchase price must be 0 or more.'),
     body('salePrice').optional().isFloat({ min: 0 }).withMessage('Sale price must be 0 or more.'),
     body('stockQty').optional().isFloat({ min: 0 }).withMessage('Stock quantity must be 0 or more.'),
+    body('unit').optional().trim().notEmpty().withMessage('Unit cannot be empty.'),
   ]),
   updateProduct
 );

@@ -19,6 +19,7 @@ import Select from '../components/ui/Select';
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
 import DatePicker from '../components/ui/DatePicker';
+import SearchBar from '../components/ui/SearchBar';
 import { formatCurrency } from '../utils/formatCurrency';
 import { formatDate } from '../utils/formatDate';
 import { getStockStatusColor } from '../utils/constants';
@@ -57,6 +58,7 @@ const Inventory = () => {
   const [purchasePrice, setPurchasePrice] = useState('');
   const [salePrice, setSalePrice] = useState('');
   const [stockQty, setStockQty] = useState('');
+  const [unit, setUnit] = useState('bags');
   const [lowStockAlert, setLowStockAlert] = useState(10);
   const [expiryDate, setExpiryDate] = useState('');
   const [batchNo, setBatchNo] = useState('');
@@ -255,6 +257,7 @@ const Inventory = () => {
     setPurchasePrice(product.purchasePrice);
     setSalePrice(product.salePrice);
     setStockQty(product.stockQty);
+    setUnit(product.unit || 'bags');
     setLowStockAlert(product.lowStockAlert);
     setExpiryDate(product.expiryDate ? new Date(product.expiryDate).toISOString().split('T')[0] : '');
     setBatchNo(product.batchNo || '');
@@ -269,6 +272,7 @@ const Inventory = () => {
     setPurchasePrice('');
     setSalePrice('');
     setStockQty('');
+    setUnit('bags');
     setLowStockAlert(10);
     setExpiryDate('');
     setBatchNo('');
@@ -309,6 +313,7 @@ const Inventory = () => {
       purchasePrice: parseFloat(purchasePrice),
       salePrice: parseFloat(salePrice),
       stockQty: parseFloat(stockQty || 0),
+      unit,
       lowStockAlert: parseFloat(lowStockAlert),
       expiryDate: expiryDate ? new Date(expiryDate).toISOString() : null,
       batchNo: batchNo || null
@@ -366,7 +371,7 @@ const Inventory = () => {
               lowStockList.map((item) => (
                 <div key={item.id} className="flex justify-between items-center bg-white/5 px-3 py-1.5 rounded-lg border border-red-500/15">
                   <span className="text-xs text-slate-300 font-semibold truncate max-w-[200px]">{item.name}</span>
-                  <span className="text-xs font-bold text-red-400">{item.stockQty} bags left (Alert: {item.lowStockAlert})</span>
+                  <span className="text-xs font-bold text-red-400">{item.stockQty} {item.unit || 'bags'} left (Alert: {item.lowStockAlert})</span>
                 </div>
               ))
             )}
@@ -401,13 +406,11 @@ const Inventory = () => {
       <Card compact>
         <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-1 w-full">
-            <Input
+            <SearchBar
               id="inventory-search"
-              placeholder="Search by name or SKU..."
-              icon={Search}
-              className="pos-filter-input pos-filter-input-icon"
+              placeholder="Search products by name/SKU..."
               value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              onChange={(val) => { setSearch(val); setPage(1); }}
             />
             <Select
               id="inventory-category"
@@ -482,7 +485,7 @@ const Inventory = () => {
                     </span>
                   </td>
                   <td className="text-sm text-slate-400">
-                    {p.lowStockAlert} bags
+                    {p.lowStockAlert} {p.unit || 'bags'}
                   </td>
                   <td className="text-xs text-slate-400 space-y-0.5">
                     {p.batchNo && <p><span className="text-slate-500">Batch:</span> {p.batchNo}</p>}
@@ -584,18 +587,32 @@ const Inventory = () => {
               onBlur={(e) => validateField('categoryId', e.target.value)}
             />
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Input
                 id="prod-stock-qty"
-                label="Stock Quantity (Bags) *"
+                label="Stock Quantity *"
                 type="number"
                 required
                 icon={Layers}
-                placeholder="Initial stock quantity..."
+                placeholder="Initial stock qty..."
                 value={stockQty}
                 error={errors.stockQty}
                 onChange={(e) => { setStockQty(e.target.value); if (errors.stockQty) validateField('stockQty', e.target.value); }}
                 onBlur={(e) => validateField('stockQty', e.target.value)}
+              />
+
+              <Select
+                id="prod-unit"
+                label="Unit *"
+                required
+                icon={Layers}
+                options={[
+                  { value: 'bags', label: 'Bags' },
+                  { value: 'bottles', label: 'Bottles' },
+                  { value: 'sacks', label: 'Sacks' }
+                ]}
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
               />
 
               <Input
@@ -604,7 +621,7 @@ const Inventory = () => {
                 type="number"
                 required
                 icon={AlertTriangle}
-                placeholder="Alert when stock drops below..."
+                placeholder="Alert level..."
                 value={lowStockAlert}
                 error={errors.lowStockAlert}
                 onChange={(e) => { setLowStockAlert(e.target.value); if (errors.lowStockAlert) validateField('lowStockAlert', e.target.value); }}

@@ -12,6 +12,7 @@ import Select from '../components/ui/Select';
 import DatePicker from '../components/ui/DatePicker';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
+import SearchBar from '../components/ui/SearchBar';
 import { formatCurrency } from '../utils/formatCurrency';
 import { formatDateTime } from '../utils/formatDate';
 import { BILL_STATUS_COLORS, PAYMENT_METHOD_LABELS } from '../utils/constants';
@@ -149,13 +150,11 @@ const BillListing = () => {
       <Card compact>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <div>
-            <Input
+            <SearchBar
               id="bill-search"
-              placeholder="Search by Bill Number..."
-              icon={Search}
-              className="pos-filter-input pos-filter-input-icon"
+              placeholder="Search by bill number..."
               value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              onChange={(val) => { setSearch(val); setPage(1); }}
             />
           </div>
           <div>
@@ -219,25 +218,25 @@ const BillListing = () => {
               const statusColors = BILL_STATUS_COLORS[bill.isVoid ? 'VOID' : bill.paymentStatus] || BILL_STATUS_COLORS.PAID;
               return (
                 <tr key={bill.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                  <td className="px-7 py-4">
+                  <td className="px-4 py-3">
                     <span className="font-mono text-sm text-emerald-400 font-semibold">{bill.billNo}</span>
                   </td>
-                  <td className="px-7 py-4 text-sm text-slate-300">
+                  <td className="px-4 py-3 text-sm text-slate-300">
                     {formatDateTime(bill.billDate)}
                   </td>
-                  <td className="px-7 py-4 text-sm text-slate-300">
+                  <td className="px-4 py-3 text-sm text-slate-300">
                     {bill.customer?.name || 'Walk-in'}
                   </td>
-                  <td className="px-7 py-4 text-sm text-slate-300">
+                  <td className="px-4 py-3 text-sm text-slate-300">
                     {PAYMENT_METHOD_LABELS[bill.paymentMethod]}
                   </td>
-                  <td className="px-7 py-4 text-sm text-slate-400">
+                  <td className="px-4 py-3 text-sm text-slate-400">
                     {formatCurrency(bill.discount)}
                   </td>
-                  <td className="px-7 py-4 text-sm font-bold text-white">
+                  <td className="px-4 py-3 text-sm font-bold text-white">
                     {formatCurrency(bill.total)}
                   </td>
-                  <td className="px-7 py-4">
+                  <td className="px-4 py-3">
                     <div className="flex flex-col gap-1 items-start">
                       <Badge variant={bill.isVoid ? 'danger' : bill.paymentStatus === 'CREDIT' ? 'warning' : 'success'}>
                         {bill.isVoid ? 'VOIDED' : bill.paymentStatus}
@@ -249,7 +248,7 @@ const BillListing = () => {
                       )}
                     </div>
                   </td>
-                  <td className="px-7 py-4">
+                  <td className="px-4 py-3">
                     <div className="flex gap-2">
                       <Button
                         id={`btn-view-${bill.billNo}`}

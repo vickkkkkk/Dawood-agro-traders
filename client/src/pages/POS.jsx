@@ -16,6 +16,7 @@ import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import Modal from '../components/ui/Modal';
 import Badge from '../components/ui/Badge';
+import SearchBar from '../components/ui/SearchBar';
 import { formatCurrency } from '../utils/formatCurrency';
 import { PAYMENT_METHOD_LABELS } from '../utils/constants';
 
@@ -162,7 +163,9 @@ const POS = () => {
       return;
     }
     if (num > maxStock) {
-      toast.error(`Cannot exceed available stock of ${maxStock} bags`);
+      const item = cart.find(i => i.id === productId);
+      const unitStr = item?.unit || 'bags';
+      toast.error(`Cannot exceed available stock of ${maxStock} ${unitStr}`);
       return;
     }
     setCart(prev => prev.map(item => item.id === productId ? { ...item, quantity: num } : item));
@@ -310,108 +313,91 @@ const POS = () => {
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-fade-in relative min-h-[calc(100vh-120px)]">
 
       {/* Left Column: Product Catalogue (7/12 cols) */}
-      <div className="lg:col-span-7 flex flex-col gap-5">
+      <div className="lg:col-span-7 flex flex-col h-[calc(100vh-140px)]">
 
-        {/* Search & Filter Header Card */}
-        <Card compact className="bg-slate-900/40 backdrop-blur-xl border-white/5">
-          <div className="flex flex-col sm:flex-row gap-4 items-center">
-            <div className="flex-1 w-full">
-              <Input
-                id="pos-search"
-                placeholder="Search products by name/SKU... (Press /)"
-                icon={Search}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pos-filter-input pos-filter-input-icon"
-              />
+        {/* Product Catalog Card Wrapper */}
+        <Card className="flex flex-col h-full bg-slate-900/40 backdrop-blur-xl border-white/5 overflow-hidden" compact={false}>
+          
+          {/* Card Header with Title and Search/Filters below */}
+          <div className="flex flex-col gap-4 pb-4 border-b border-white/10 mb-4 shrink-0">
+            <div className="flex items-center gap-2">
+              <ShoppingBag size={18} className="text-emerald-400" />
+              <h3 className="text-base font-bold text-white tracking-wide">Product Catalogue</h3>
             </div>
-            <div className="w-full sm:w-56">
-              <Select
-                id="pos-category"
-                options={categoriesOptions}
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="pos-filter-input pos-filter-select"
-              />
+            <div className="flex flex-col sm:flex-row gap-3 items-center w-full">
+              <div className="flex-1">
+                <SearchBar
+                  id="pos-search"
+                  placeholder="Search products by name/SKU... (/)"
+                  value={searchTerm}
+                  onChange={(val) => setSearchTerm(val)}
+                  className="w-full"
+                />
+              </div>
+              <div className="w-full sm:w-48">
+                <Select
+                  id="pos-category"
+                  options={categoriesOptions}
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  className="w-full !mb-0"
+                />
+              </div>
             </div>
+          </div>
+
+          {/* Catalog items list */}
+          <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+            <div className="h-6" />
+            {productsLoading ? (
+              <div className="flex items-center justify-center py-20">
+                <div className="w-10 h-10 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin"></div>
+              </div>
+            ) : filteredProducts.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-slate-500 text-center">
+                <ShoppingBag size={48} className="mb-3 text-slate-600 animate-bounce-subtle" />
+                <p className="text-sm font-semibold text-slate-400">No products found</p>
+                <p className="text-xs text-slate-500 mt-1">Check search query or filters.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4">
+                {filteredProducts.map((p) => {
+                  const outOfStock = parseFloat(p.stockQty) <= 0;
+                  const lowStock = parseFloat(p.stockQty) <= parseFloat(p.lowStockAlert);
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => !outOfStock && addToCart(p)}
+                      className={`
+                        group flex items-center justify-between gap-6 rounded-xl bg-slate-950/35 border border-white/5 p-4.5
+                        cursor-pointer transition-all duration-200 hover:bg-slate-900/60
+                        ${outOfStock ? 'opacity-40 cursor-not-allowed' : ''}
+                      `}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-bold text-white text-sm tracking-wide leading-snug whitespace-normal break-words">{p.name}</h4>
+                        <p className="text-[10px] text-slate-500 font-mono tracking-wider mt-1.5 uppercase">{p.sku}</p>
+                      </div>
+
+                      <div className="flex items-center gap-5 flex-shrink-0">
+                        <Badge variant={outOfStock ? 'danger' : lowStock ? 'warning' : 'success'} size="sm">
+                          {p.stockQty} {p.unit || 'bags'}
+                        </Badge>
+
+                        <div className="min-w-[85px] text-right">
+                          <p className="text-slate-500 text-[9px] uppercase font-bold tracking-wider mb-0.5">Price</p>
+                          <span className="text-emerald-400 font-extrabold text-sm">
+                            {formatCurrency(p.salePrice)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </Card>
-
-        {/* Product Catalog Grid */}
-        {productsLoading ? (
-          <div className="flex-1 flex items-center justify-center py-24">
-            <div className="w-12 h-12 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin"></div>
-          </div>
-        ) : filteredProducts.length === 0 ? (
-          <Card className="flex-1 flex flex-col items-center justify-center py-20 text-slate-500 bg-slate-900/20 border-white/5 p-8 text-center">
-            <ShoppingBag size={56} className="mb-4 text-slate-600 animate-bounce-subtle" />
-            <p className="text-base font-semibold text-slate-400">No products found</p>
-            <p className="text-xs text-slate-500 mt-1 mb-6">Add items to inventory or check your search criteria.</p>
-            <div className="flex flex-wrap justify-center gap-3">
-              <Button
-                variant="primary"
-                onClick={() => navigate('/inventory', { state: { openAdd: true } })}
-              >
-                Add Product
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => navigate('/inventory')}
-              >
-                Go to Inventory
-              </Button>
-            </div>
-          </Card>
-        ) : (
-          <div className="flex flex-col gap-3 overflow-y-auto max-h-[calc(100vh-250px)] pr-2">
-            {filteredProducts.map((p) => {
-              const outOfStock = parseFloat(p.stockQty) <= 0;
-              const lowStock = parseFloat(p.stockQty) <= parseFloat(p.lowStockAlert);
-              return (
-                <div
-                  key={p.id}
-                  onClick={() => !outOfStock && addToCart(p)}
-                  className={`
-                    group flex items-center justify-between gap-4 rounded-xl bg-white/5 border border-white/5 p-3.5
-                    cursor-pointer transition-all duration-200 hover:bg-white/10 hover:translate-x-1
-                    ${outOfStock ? 'opacity-40 cursor-not-allowed' : ''}
-                  `}
-                >
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-bold text-white text-sm tracking-wide truncate">{p.name}</h3>
-                    <p className="text-[10px] text-slate-500 font-mono tracking-wider mt-0.5 uppercase">{p.sku}</p>
-                  </div>
-
-                  <div className="flex items-center gap-6">
-                    <div className="text-right">
-                      <Badge variant={outOfStock ? 'danger' : lowStock ? 'warning' : 'success'} size="sm">
-                        {p.stockQty} bags
-                      </Badge>
-                    </div>
-
-                    <div className="min-w-[100px] text-right">
-                      <p className="text-slate-500 text-[9px] uppercase font-bold tracking-wider mb-0.5">Price</p>
-                      <span className="text-emerald-400 font-extrabold text-sm">
-                        {formatCurrency(p.salePrice)}
-                      </span>
-                    </div>
-
-                    <button
-                      className={`
-                        w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 
-                        flex items-center justify-center group-hover:bg-emerald-500 group-hover:text-white transition-all duration-200
-                        ${outOfStock ? 'pointer-events-none' : ''}
-                      `}
-                      aria-label="Add to cart"
-                    >
-                      <Plus size={16} />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
       </div>
 
       {/* Right Column: Active Bill Panel (5/12 cols) */}
@@ -456,7 +442,7 @@ const POS = () => {
                 variant="secondary"
                 size="md"
                 onClick={() => { setErrors({}); setShowCustomerModal(true); }}
-                className="!p-3.5 !rounded-2xl"
+                className="!p-3.5 !rounded-md"
                 icon={UserPlus}
                 title="Add New Customer"
                 aria-label="Add New Customer"
@@ -465,7 +451,8 @@ const POS = () => {
           </div>
 
           {/* Cart List */}
-          <div className="flex-1 overflow-y-auto py-4 space-y-3 pr-1">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+            <div className="h-6" />
             {cart.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-slate-500">
                 <ShoppingCart size={44} className="mb-3 text-slate-700 animate-pulse" />
@@ -474,10 +461,13 @@ const POS = () => {
               </div>
             ) : (
               cart.map((item) => (
-                <div key={item.id} className="flex items-center justify-between gap-3 p-3.5 bg-white/5 border border-white/5 rounded-2xl hover:bg-white/10 transition-colors">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-white truncate">{item.name}</p>
-                    <div className="flex items-center gap-1 mt-1 bg-slate-950/20 border border-white/5 rounded-lg px-2 py-0.5 w-max">
+                <div
+                  key={item.id}
+                  className="group flex items-center justify-between gap-4 rounded-xl bg-slate-950/35 border border-white/5 p-4.5 hover:bg-slate-900/60 hover:border-emerald-500/10 transition-all duration-200"
+                >
+                  <div className="flex-1 min-w-0 pr-2">
+                    <p className="text-sm font-bold text-white whitespace-normal break-words">{item.name}</p>
+                    <div className="flex items-center gap-1.5 mt-1.5 bg-slate-950/40 border border-white/5 rounded-lg px-2 py-0.5 w-max">
                       <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Price:</span>
                       <span className="text-[11px] text-slate-400 font-semibold">Rs.</span>
                       <input
@@ -485,47 +475,54 @@ const POS = () => {
                         min="0"
                         value={item.salePrice}
                         onChange={(e) => updatePrice(item.id, e.target.value)}
-                        className="w-16 bg-transparent text-white focus:outline-none border-none text-xs font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        className="w-16 bg-transparent text-white focus:outline-none border-none text-xs font-extrabold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                     </div>
                   </div>
 
-                  {/* Quantity Controls */}
-                  <div className="flex items-center gap-1 bg-slate-950/40 border border-white/10 rounded-xl p-1">
+                  <div className="flex items-center gap-4 flex-shrink-0">
+                    {/* Quantity Controls */}
+                    <div className="flex items-center gap-1 bg-slate-950/40 border border-white/10 rounded-xl p-1">
+                      <button
+                        onClick={() => updateQuantity(item.id, (parseFloat(item.quantity) || 0) - 1, item.stockQty)}
+                        className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                        type="button"
+                      >
+                        <Minus size={12} />
+                      </button>
+                      <input
+                        type="number"
+                        min="1"
+                        max={item.stockQty}
+                        value={item.quantity}
+                        onChange={(e) => updateQuantity(item.id, e.target.value, item.stockQty)}
+                        className="w-8 text-center bg-transparent text-white focus:outline-none border-none text-xs font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      />
+                      <button
+                        onClick={() => updateQuantity(item.id, (parseFloat(item.quantity) || 0) + 1, item.stockQty)}
+                        className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                        type="button"
+                      >
+                        <Plus size={12} />
+                      </button>
+                    </div>
+
+                    <div className="text-right min-w-[85px] pr-1">
+                      <p className="text-slate-500 text-[9px] uppercase font-bold tracking-wider mb-0.5">Total</p>
+                      <span className="text-emerald-400 font-extrabold text-sm">
+                        {formatCurrency((parseFloat(item.salePrice) || 0) * (parseFloat(item.quantity) || 0))}
+                      </span>
+                    </div>
+
                     <button
-                      onClick={() => updateQuantity(item.id, (parseFloat(item.quantity) || 0) - 1, item.stockQty)}
-                      className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                      onClick={() => removeFromCart(item.id)}
+                      className="text-slate-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition-colors"
+                      type="button"
+                      aria-label="Remove item"
                     >
-                      <Minus size={12} />
-                    </button>
-                    <input
-                      type="number"
-                      min="1"
-                      max={item.stockQty}
-                      value={item.quantity}
-                      onChange={(e) => updateQuantity(item.id, e.target.value, item.stockQty)}
-                      className="w-8 text-center bg-transparent text-white focus:outline-none border-none text-xs font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                    <button
-                      onClick={() => updateQuantity(item.id, (parseFloat(item.quantity) || 0) + 1, item.stockQty)}
-                      className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-                    >
-                      <Plus size={12} />
+                      <Trash2 size={16} />
                     </button>
                   </div>
-
-                  <div className="text-right min-w-[80px] pr-1">
-                    <p className="text-sm font-bold text-white">
-                      {formatCurrency((parseFloat(item.salePrice) || 0) * (parseFloat(item.quantity) || 0))}
-                    </p>
-                  </div>
-
-                  <button
-                    onClick={() => removeFromCart(item.id)}
-                    className="text-slate-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition-colors"
-                  >
-                    <Trash2 size={16} />
-                  </button>
                 </div>
               ))
             )}
@@ -566,7 +563,7 @@ const POS = () => {
               <Button
                 id="btn-checkout"
                 variant="primary"
-                className="w-full !py-3.5 !rounded-2xl font-bold uppercase tracking-wider text-sm mt-1"
+                className="w-full !py-3.5 !rounded-md font-bold uppercase tracking-wider text-sm mt-1"
                 disabled={cart.length === 0}
                 onClick={() => { setErrors({}); setCreditAmountPaid(''); setShowCheckoutModal(true); }}
               >
@@ -584,10 +581,10 @@ const POS = () => {
           title="Payment Details"
           onClose={() => setShowCheckoutModal(false)}
         >
-          <div className="space-y-5">
+          <div className="space-y-6">
             <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5">Select Payment Method</label>
-              <div className="grid grid-cols-2 gap-2">
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Select Payment Method</label>
+              <div className="grid grid-cols-2 gap-3">
                 {[
                   { id: 'CASH', label: 'Cash', icon: Landmark },
                   { id: 'JAZZCASH', label: 'JazzCash', icon: CreditCard },
@@ -602,7 +599,7 @@ const POS = () => {
                       key={method.id}
                       onClick={() => setPaymentMethod(method.id)}
                       className={`
-                        flex items-center gap-2.5 p-3.5 rounded-2xl border text-sm font-semibold transition-all cursor-pointer
+                        flex items-center gap-2.5 p-3 rounded-lg border text-sm font-semibold transition-all cursor-pointer
                         ${isSelected
                           ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400 shadow-md shadow-emerald-500/5'
                           : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10'
@@ -619,16 +616,16 @@ const POS = () => {
 
             {paymentMethod === 'CREDIT' && (
               <div className="space-y-4">
-                <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl space-y-3">
-                  <p className="text-xs text-amber-300 font-medium leading-relaxed">
-                    ⚠️ Credit/Udhar is selected. Customer profile is REQUIRED.
+                <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl space-y-4">
+                  <p className="text-xs text-amber-300 font-semibold leading-relaxed flex items-center gap-1.5">
+                    ⚠️ Credit/Udhar requires a customer profile.
                   </p>
                   {!selectedCustomerId ? (
                     <p className="text-xs text-red-400 font-bold">
                       Please select a customer on the cart panel before checking out.
                     </p>
                   ) : (
-                    <div className="space-y-3 pt-1 border-t border-amber-500/10">
+                    <div className="space-y-4 pt-3 border-t border-amber-500/15">
                       <Input
                         id="credit-cash-paid"
                         label="Cash Paid (Down Payment)"
@@ -646,10 +643,9 @@ const POS = () => {
                         }}
                         error={errors.creditAmountPaid}
                         icon={DollarSign}
-                        className="!py-3 !rounded-xl"
                       />
                       
-                      <div className="flex flex-col gap-1.5 pt-2 border-t border-white/5 text-xs font-semibold">
+                      <div className="flex flex-col gap-2 pt-3 border-t border-white/5 text-xs font-semibold">
                         <div className="flex justify-between">
                           <span className="text-slate-400">Paid in Cash:</span>
                           <span className="text-white">Rs. {(parseFloat(creditAmountPaid) || 0).toLocaleString()}</span>
@@ -666,7 +662,7 @@ const POS = () => {
             )}
 
             {paymentMethod === 'CASH' && (
-              <div className="space-y-3 p-4 bg-slate-950/40 border border-white/10 rounded-2xl">
+              <div className="space-y-4 p-4 bg-slate-950/40 border border-white/10 rounded-xl">
                 <Input
                   id="cash-tendered-input"
                   label="Cash Tendered"
@@ -677,9 +673,8 @@ const POS = () => {
                   icon={DollarSign}
                   onChange={(e) => { setCashTendered(e.target.value); if (errors.cashTendered) validateCashTendered(e.target.value); }}
                   onBlur={(e) => validateCashTendered(e.target.value)}
-                  className="!py-3 !rounded-xl"
                 />
-                <div className="flex justify-between items-center text-sm mt-3 pt-3 border-t border-white/5 font-semibold">
+                <div className="flex justify-between items-center text-sm mt-4 pt-3 border-t border-white/5 font-semibold">
                   <span className="text-slate-400">Change Due:</span>
                   <span className="font-extrabold text-white text-base">{formatCurrency(changeDue)}</span>
                 </div>
@@ -691,12 +686,12 @@ const POS = () => {
               <span className="font-extrabold text-lg text-emerald-400">{formatCurrency(total)}</span>
             </div>
 
-            <div className="flex justify-end gap-2 pt-4">
-              <Button variant="secondary" className="!rounded-xl" onClick={() => setShowCheckoutModal(false)}>Cancel</Button>
+            <div className="flex justify-end gap-3 pt-4">
+              <Button variant="secondary" className="!rounded-md" onClick={() => setShowCheckoutModal(false)}>Cancel</Button>
               <Button
                 id="btn-confirm-checkout"
                 variant="primary"
-                className="!rounded-xl px-5 font-bold"
+                className="!rounded-md px-5 font-bold"
                 onClick={handleCheckoutSubmit}
                 loading={createBillMutation.isPending}
                 disabled={paymentMethod === 'CREDIT' && !selectedCustomerId}
