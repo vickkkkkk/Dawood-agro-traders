@@ -464,7 +464,7 @@ const Inventory = () => {
         <Table
           id="products-table"
           loading={productsLoading || productsFetching}
-          headers={['Product Name', 'SKU', 'Category', 'Purchase Price', 'Sale Price', 'Stock Qty', 'Low Stock Alert', 'Batch / Expiry', 'Actions']}
+          headers={['Product Name', 'Category', 'Purchase Price', 'Sale Price', 'Stock Qty', 'Low Stock Alert', 'Batch / Expiry', 'Actions']}
           onPageChange={setPage}
           currentPage={page}
           totalPages={totalPages}
@@ -476,9 +476,6 @@ const Inventory = () => {
                 <tr key={p.id}>
                   <td>
                     <p className="font-semibold text-white text-sm">{p.name}</p>
-                  </td>
-                  <td className="font-mono text-xs text-slate-400">
-                    {p.sku}
                   </td>
                   <td className="text-sm text-slate-300">
                     {p.category?.name || 'General'}

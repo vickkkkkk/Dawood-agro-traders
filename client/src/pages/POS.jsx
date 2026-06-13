@@ -376,7 +376,6 @@ const POS = () => {
                     >
                       <div className="flex-1 min-w-0">
                         <h4 className="font-bold text-white text-sm tracking-wide leading-snug whitespace-normal break-words">{p.name}</h4>
-                        <p className="text-[10px] text-slate-500 font-mono tracking-wider mt-1.5 uppercase">{p.sku}</p>
                       </div>
 
                       <div className="flex items-center gap-5 flex-shrink-0">
