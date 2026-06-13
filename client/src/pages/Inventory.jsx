@@ -487,7 +487,7 @@ const Inventory = () => {
                     {formatCurrency(p.salePrice)}
                   </td>
                   <td>
-                    <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${statusColor.bg} ${statusColor.text}`}>
+                    <span className={`text-xs font-bold ${statusColor.text}`}>
                       {p.stockQty} {p.unit || 'bags'}
                     </span>
                   </td>

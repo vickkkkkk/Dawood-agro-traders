@@ -259,7 +259,7 @@ const UserManagement = () => {
                       </div>
                       <div>
                         <p className="font-semibold text-white text-sm">{u.name}</p>
-                        {u.id === currentUser.id && <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1 py-0.2 rounded font-semibold">YOU</span>}
+                        {u.id === currentUser.id && <span className="text-[10px] text-emerald-400 font-semibold">YOU</span>}
                       </div>
                     </div>
                   </td>
@@ -267,7 +267,7 @@ const UserManagement = () => {
                     {u.email}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${rColors.bg} ${rColors.text}`}>
+                    <span className={`text-xs font-semibold ${rColors.text}`}>
                       {ROLE_LABELS[u.role]}
                     </span>
                   </td>

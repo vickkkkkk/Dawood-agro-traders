@@ -32,10 +32,10 @@ export const BILL_STATUS = {
 };
 
 export const BILL_STATUS_COLORS = {
-  PAID: { bg: 'bg-green-500/20', text: 'text-green-400', border: 'border-green-500/30' },
-  PARTIAL: { bg: 'bg-amber-500/20', text: 'text-amber-400', border: 'border-amber-500/30' },
-  CREDIT: { bg: 'bg-red-500/20', text: 'text-red-400', border: 'border-red-500/30' },
-  VOID: { bg: 'bg-gray-500/20', text: 'text-gray-400', border: 'border-gray-500/30' },
+  PAID: { bg: '', text: 'text-green-400', border: '' },
+  PARTIAL: { bg: '', text: 'text-amber-400', border: '' },
+  CREDIT: { bg: '', text: 'text-red-400', border: '' },
+  VOID: { bg: '', text: 'text-gray-400', border: '' },
 };
 
 // User Roles
@@ -52,9 +52,9 @@ export const ROLE_LABELS = {
 };
 
 export const ROLE_COLORS = {
-  ADMIN: { bg: 'bg-purple-500/20', text: 'text-purple-400' },
-  MANAGER: { bg: 'bg-blue-500/20', text: 'text-blue-400' },
-  CASHIER: { bg: 'bg-emerald-500/20', text: 'text-emerald-400' },
+  ADMIN: { bg: '', text: 'text-purple-400' },
+  MANAGER: { bg: '', text: 'text-blue-400' },
+  CASHIER: { bg: '', text: 'text-emerald-400' },
 };
 
 // Stock status thresholds
@@ -65,9 +65,9 @@ export const STOCK_STATUS = {
 };
 
 export const getStockStatusColor = (qty) => {
-  if (qty <= STOCK_STATUS.OUT) return { bg: 'bg-red-500/20', text: 'text-red-400' };
-  if (qty <= STOCK_STATUS.LOW) return { bg: 'bg-amber-500/20', text: 'text-amber-400' };
-  return { bg: 'bg-green-500/20', text: 'text-green-400' };
+  if (qty <= STOCK_STATUS.OUT) return { bg: '', text: 'text-red-400' };
+  if (qty <= STOCK_STATUS.LOW) return { bg: '', text: 'text-amber-400' };
+  return { bg: '', text: 'text-green-400' };
 };
 
 // Navigation items
