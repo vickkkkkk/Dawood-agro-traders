@@ -282,9 +282,19 @@ const Inventory = () => {
   const handleProductSubmit = (e) => {
     e.preventDefault();
 
+    let finalSku = sku;
+    if (!editingProduct) {
+      const cleanName = name
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+      finalSku = `${cleanName || 'prod'}-${Math.floor(1000 + Math.random() * 9000)}`;
+    }
+
     // Run all validations
     const nameErr = !name ? 'Product name is required' : name.trim().length < 3 ? 'Product name must be at least 3 characters' : null;
-    const skuErr = !sku ? 'SKU / Barcode is required' : null;
+    const skuErr = editingProduct && !finalSku ? 'SKU / Barcode is required' : null;
     const categoryErr = !categoryId ? 'Category is required' : null;
     const stockErr = stockQty === '' ? 'Stock quantity is required' : parseFloat(stockQty) < 0 ? 'Stock cannot be negative' : null;
     const alertErr = lowStockAlert === '' ? 'Low stock alert is required' : parseFloat(lowStockAlert) < 0 ? 'Alert level cannot be negative' : null;
@@ -308,7 +318,7 @@ const Inventory = () => {
 
     const payload = {
       name,
-      sku,
+      sku: finalSku,
       categoryId: parseInt(categoryId),
       purchasePrice: parseFloat(purchasePrice),
       salePrice: parseFloat(salePrice),
@@ -561,18 +571,6 @@ const Inventory = () => {
               error={errors.name}
               onChange={(e) => { setName(e.target.value); if (errors.name) validateField('name', e.target.value); }}
               onBlur={(e) => validateField('name', e.target.value)}
-            />
-
-            <Input
-              id="prod-sku"
-              label="SKU / Barcode *"
-              required
-              icon={Barcode}
-              placeholder="Unique SKU, e.g. FRT-DAP-50..."
-              value={sku}
-              error={errors.sku}
-              onChange={(e) => { setSku(e.target.value); if (errors.sku) validateField('sku', e.target.value); }}
-              onBlur={(e) => validateField('sku', e.target.value)}
             />
 
             <Select
