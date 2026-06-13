@@ -7,6 +7,7 @@ import Card from '../components/ui/Card';
 import Table from '../components/ui/Table';
 import Badge from '../components/ui/Badge';
 import Input from '../components/ui/Input';
+import Select from '../components/ui/Select';
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
 import { formatCurrency } from '../utils/formatCurrency';
@@ -32,6 +33,8 @@ const Customers = () => {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
+  const [balanceType, setBalanceType] = useState('OUTSTANDING');
+  const [balanceAmount, setBalanceAmount] = useState('');
   const [errors, setErrors] = useState({});
 
   // Fetch Customers
@@ -115,6 +118,14 @@ const Customers = () => {
     setName(c.name);
     setPhone(c.phone);
     setAddress(c.address || '');
+    const currentBalance = parseFloat(c.creditBalance) || 0;
+    if (currentBalance < 0) {
+      setBalanceType('ADVANCE');
+      setBalanceAmount(Math.abs(currentBalance).toString());
+    } else {
+      setBalanceType('OUTSTANDING');
+      setBalanceAmount(currentBalance === 0 ? '' : currentBalance.toString());
+    }
     setErrors({});
     setShowFormModal(true);
   };
@@ -124,6 +135,8 @@ const Customers = () => {
     setName('');
     setPhone('');
     setAddress('');
+    setBalanceType('OUTSTANDING');
+    setBalanceAmount('');
     setErrors({});
   };
 
@@ -143,10 +156,14 @@ const Customers = () => {
       return;
     }
 
-    const payload = { name, phone, address };
+    const amountVal = parseFloat(balanceAmount) || 0;
+    const signedBalance = balanceType === 'ADVANCE' ? -amountVal : amountVal;
+
     if (editingCustomer) {
+      const payload = { name, phone, address, creditBalance: signedBalance };
       updateCustomerMutation.mutate({ id: editingCustomer.id, data: payload });
     } else {
+      const payload = { name, phone, address, initialBalance: signedBalance };
       createCustomerMutation.mutate(payload);
     }
   };
@@ -299,6 +316,29 @@ const Customers = () => {
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
               />
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Select
+                  id="c-balance-type"
+                  label={editingCustomer ? "Adjust Balance Type" : "Initial Balance Type"}
+                  options={[
+                    { value: 'OUTSTANDING', label: 'Outstanding Udhar (Owed to Shop)' },
+                    { value: 'ADVANCE', label: 'Advance Payment (Paid to Shop)' }
+                  ]}
+                  value={balanceType}
+                  onChange={(e) => setBalanceType(e.target.value)}
+                />
+                <Input
+                  id="c-balance-amount"
+                  label={editingCustomer ? "Adjust Balance Amount (PKR)" : "Initial Balance Amount (PKR)"}
+                  type="number"
+                  min="0"
+                  icon={Landmark}
+                  placeholder="e.g. 5000"
+                  value={balanceAmount}
+                  onChange={(e) => setBalanceAmount(e.target.value)}
+                />
+              </div>
           </form>
         </Modal>
       )}

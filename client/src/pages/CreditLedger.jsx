@@ -57,14 +57,16 @@ const CreditLedger = () => {
     enabled: !!selectedCustomerId,
   });
   const ledgerTransactions = ledgerData?.data?.transactions || ledgerData?.transactions || [];
+  const selectedCustomerDetails = ledgerData?.data?.customer || ledgerData?.customer || {};
 
   // Fetch customers (for dropdown inside payment modal)
   const { data: customersData } = useQuery({
     queryKey: ['all-customers-for-dropdown'],
     queryFn: () => getCustomers({ limit: 1000 }),
   });
+
   const customers = Array.isArray(customersData?.data) ? customersData.data : (customersData?.data?.customers || customersData?.customers || []);
-  const creditCustomersOptions = customers.filter(c => parseFloat(c.creditBalance) > 0);
+  const creditCustomersOptions = customers;
 
   // Mutations
   const recordPaymentMutation = useMutation({
@@ -110,16 +112,6 @@ const CreditLedger = () => {
         errs.recoveryCustomerId = 'Please select a customer';
       } else {
         delete errs.recoveryCustomerId;
-        // Re-validate amount against new customer balance if amount is set
-        if (amount) {
-          const selectedCustomer = creditCustomersOptions.find(c => c.id === parseInt(value));
-          const maxBalance = selectedCustomer ? parseFloat(selectedCustomer.creditBalance) : Infinity;
-          if (parseFloat(amount) > maxBalance) {
-            errs.amount = `Payment exceeds outstanding balance of Rs. ${maxBalance.toLocaleString()}`;
-          } else {
-            delete errs.amount;
-          }
-        }
       }
     }
 
@@ -128,14 +120,6 @@ const CreditLedger = () => {
         errs.amount = 'Amount is required';
       } else if (parseFloat(value) <= 0) {
         errs.amount = 'Amount must be greater than 0';
-      } else if (recoveryCustomerId) {
-        const selectedCustomer = creditCustomersOptions.find(c => c.id === parseInt(recoveryCustomerId));
-        const maxBalance = selectedCustomer ? parseFloat(selectedCustomer.creditBalance) : Infinity;
-        if (parseFloat(value) > maxBalance) {
-          errs.amount = `Payment exceeds outstanding balance of Rs. ${maxBalance.toLocaleString()}`;
-        } else {
-          delete errs.amount;
-        }
       } else {
         delete errs.amount;
       }
@@ -154,12 +138,6 @@ const CreditLedger = () => {
       amountErr = 'Amount is required';
     } else if (parseFloat(amount) <= 0) {
       amountErr = 'Amount must be greater than 0';
-    } else if (recoveryCustomerId) {
-      const selectedCustomer = creditCustomersOptions.find(c => c.id === parseInt(recoveryCustomerId));
-      const maxBalance = selectedCustomer ? parseFloat(selectedCustomer.creditBalance) : Infinity;
-      if (parseFloat(amount) > maxBalance) {
-        amountErr = `Payment exceeds outstanding balance of Rs. ${maxBalance.toLocaleString()}`;
-      }
     }
 
     if (customerErr || amountErr) {
@@ -304,8 +282,10 @@ const CreditLedger = () => {
                   {c.updatedAt ? formatDate(c.updatedAt) : 'N/A'}
                 </td>
                 <td className="px-7 py-4">
-                  <span className="text-sm font-bold text-red-400">
-                    {formatCurrency(c.creditBalance)}
+                  <span className={`text-sm font-bold ${c.creditBalance > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                    {c.creditBalance < 0 
+                      ? `Advance: ${formatCurrency(Math.abs(c.creditBalance))}` 
+                      : formatCurrency(c.creditBalance)}
                   </span>
                 </td>
                 <td className="px-7 py-4">
@@ -361,12 +341,10 @@ const CreditLedger = () => {
               <div className="grid grid-cols-2 gap-4 text-xs p-3 bg-white/5 border border-white/5 rounded-xl">
                 <div>
                   <span className="text-slate-500">Outstanding Balance:</span>
-                  <p className="text-lg font-bold text-red-400">
-                    {formatCurrency(
-                      ledgerTransactions.reduce((sum, t) => {
-                        return sum + (t.type === 'CREDIT' ? parseFloat(t.amount) : -parseFloat(t.amount));
-                      }, 0)
-                    )}
+                  <p className={`text-lg font-bold ${selectedCustomerDetails.creditBalance > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                    {selectedCustomerDetails.creditBalance < 0 
+                      ? `Advance: ${formatCurrency(Math.abs(selectedCustomerDetails.creditBalance))}` 
+                      : formatCurrency(selectedCustomerDetails.creditBalance || 0)}
                   </p>
                 </div>
                 <div className="text-right">
@@ -462,10 +440,16 @@ const CreditLedger = () => {
                 label="Select Customer *"
                 required
                 icon={User}
-                options={creditCustomersOptions.map(c => ({
-                  value: c.id,
-                  label: `${c.name} (${c.phone}) - Udhar: ${formatCurrency(c.creditBalance)}`
-                }))}
+                options={creditCustomersOptions.map(c => {
+                  const balance = parseFloat(c.creditBalance) || 0;
+                  const balanceStr = balance < 0 
+                    ? `Advance: ${formatCurrency(Math.abs(balance))}` 
+                    : `Udhar: ${formatCurrency(balance)}`;
+                  return {
+                    value: c.id,
+                    label: `${c.name} (${c.phone || 'No Phone'}) - ${balanceStr}`
+                  };
+                })}
                 value={recoveryCustomerId}
                 error={errors.recoveryCustomerId}
                 onChange={(e) => { setRecoveryCustomerId(e.target.value); if (errors.recoveryCustomerId || errors.amount) validateField('recoveryCustomerId', e.target.value); }}

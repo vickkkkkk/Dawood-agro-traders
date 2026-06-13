@@ -406,6 +406,12 @@ const BillListing = () => {
 
                   {selectedBillDetails.paymentMethod === 'CREDIT' ? (
                     <div className="space-y-1 border-t border-dashed border-gray-300 pt-1 text-[10px]">
+                      {parseFloat(selectedBillDetails.amountPaid) > 0 && (
+                        <div className="flex justify-between text-gray-600 font-semibold">
+                          <span>Down Payment (Cash):</span>
+                          <span>Rs. {parseFloat(selectedBillDetails.amountPaid).toLocaleString()}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between text-red-600 font-semibold">
                         <span>Credit Amount:</span>
                         <span>Rs. {parseFloat(selectedBillDetails.creditAmount).toLocaleString()}</span>

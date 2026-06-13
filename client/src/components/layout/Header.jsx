@@ -1,8 +1,6 @@
-import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Bell, Menu, Settings, Sun, Moon, LogOut } from 'lucide-react';
+import { Bell, Menu, LogOut } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { useTheme } from '../../context/ThemeContext';
 
 const pageTitles = {
   '/': 'Dashboard',
@@ -18,21 +16,8 @@ const pageTitles = {
 const Header = ({ onMenuClick }) => {
   const location = useLocation();
   const { user, logout } = useAuth();
-  const { theme, setTheme } = useTheme();
-  const [showSettings, setShowSettings] = useState(false);
 
   const title = pageTitles[location.pathname] || 'Dashboard';
-
-  useEffect(() => {
-    if (!showSettings) return;
-    const handleOutsideClick = (e) => {
-      if (!e.target.closest('.header-settings-container')) {
-        setShowSettings(false);
-      }
-    };
-    document.addEventListener('click', handleOutsideClick);
-    return () => document.removeEventListener('click', handleOutsideClick);
-  }, [showSettings]);
 
   return (
     <header
@@ -59,7 +44,7 @@ const Header = ({ onMenuClick }) => {
                 year: 'numeric',
                 month: 'long',
                 day: 'numeric',
-              })}
+                })}
             </p>
           </div>
         </div>
@@ -75,61 +60,7 @@ const Header = ({ onMenuClick }) => {
             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-emerald-500 rounded-full" />
           </button>
 
-          {/* Settings / Theme Trigger Dropdown */}
-          <div className="relative header-settings-container">
-            <button
-              id="btn-settings"
-              onClick={() => setShowSettings(!showSettings)}
-              className={`p-2.5 rounded-xl border transition-colors cursor-pointer flex items-center justify-center ${
-                showSettings 
-                  ? 'bg-white/10 border-white/20 text-white' 
-                  : 'bg-white/5 border-white/10 text-slate-400 hover:text-white hover:bg-white/10'
-              }`}
-              title="Settings"
-            >
-              <Settings size={18} className={showSettings ? 'animate-spin-slow' : ''} />
-            </button>
-            {showSettings && (
-              <div className="absolute right-0 mt-2.5 w-56 rounded-2xl bg-slate-900 border border-white/10 shadow-2xl p-4 z-50 animate-fade-in">
-                <p className="text-xs font-bold text-slate-400 mb-3 uppercase tracking-wider">Preferences</p>
-                <div className="space-y-3">
-                  <div className="flex flex-col gap-1.5">
-                    <span className="text-[11px] font-bold text-slate-500 uppercase">App Theme</span>
-                    <div className="grid grid-cols-2 gap-1.5 p-1 bg-white/5 rounded-xl border border-white/5">
-                      <button
-                        onClick={() => {
-                          setTheme('light');
-                          setShowSettings(false);
-                        }}
-                        className={`flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                          theme === 'light'
-                            ? 'bg-white text-slate-900 shadow-sm'
-                            : 'text-slate-400 hover:text-white hover:bg-white/5'
-                        }`}
-                      >
-                        <Sun size={14} />
-                        <span>Light</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          setTheme('dark');
-                          setShowSettings(false);
-                        }}
-                        className={`flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                          theme === 'dark'
-                            ? 'bg-white/10 text-white shadow-sm border border-white/5'
-                            : 'text-slate-400 hover:text-white hover:bg-white/5'
-                        }`}
-                      >
-                        <Moon size={14} />
-                        <span>Dark</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+
 
           {/* User Profile */}
           <div className="flex items-center gap-3">

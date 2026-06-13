@@ -44,15 +44,32 @@ export const getCustomers = async (req, res, next) => {
 // POST /api/customers
 export const createCustomer = async (req, res, next) => {
   try {
-    const { name, phone, address } = req.body;
+    const { name, phone, address, initialBalance = 0 } = req.body;
+    const balance = Number(initialBalance);
 
-    const customer = await prisma.customer.create({
-      data: {
-        name,
-        phone,
-        address: address || null,
-        creditBalance: 0,
-      },
+    const customer = await prisma.$transaction(async (tx) => {
+      const created = await tx.customer.create({
+        data: {
+          name,
+          phone,
+          address: address || null,
+          creditBalance: balance,
+        },
+      });
+
+      if (balance !== 0) {
+        await tx.creditTransaction.create({
+          data: {
+            customerId: created.id,
+            type: balance > 0 ? 'CREDIT' : 'PAYMENT',
+            amount: Math.abs(balance),
+            description: balance > 0 ? 'Initial Outstanding Balance' : 'Initial Advance Payment',
+            transactionDate: new Date(),
+          },
+        });
+      }
+
+      return created;
     });
 
     res.status(201).json({
@@ -69,7 +86,7 @@ export const createCustomer = async (req, res, next) => {
 export const updateCustomer = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { name, phone, address } = req.body;
+    const { name, phone, address, creditBalance } = req.body;
 
     const existing = await prisma.customer.findUnique({ where: { id: Number(id) } });
     if (!existing) {
@@ -81,9 +98,31 @@ export const updateCustomer = async (req, res, next) => {
     if (phone !== undefined) updateData.phone = phone;
     if (address !== undefined) updateData.address = address;
 
-    const customer = await prisma.customer.update({
-      where: { id: Number(id) },
-      data: updateData,
+    const customer = await prisma.$transaction(async (tx) => {
+      if (creditBalance !== undefined) {
+        const newBalance = Number(creditBalance);
+        const oldBalance = Number(existing.creditBalance);
+        const difference = newBalance - oldBalance;
+
+        if (difference !== 0) {
+          updateData.creditBalance = newBalance;
+
+          await tx.creditTransaction.create({
+            data: {
+              customerId: Number(id),
+              type: difference > 0 ? 'CREDIT' : 'PAYMENT',
+              amount: Math.abs(difference),
+              description: 'Balance adjustment / update',
+              transactionDate: new Date(),
+            },
+          });
+        }
+      }
+
+      return await tx.customer.update({
+        where: { id: Number(id) },
+        data: updateData,
+      });
     });
 
     res.json({

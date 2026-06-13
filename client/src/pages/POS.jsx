@@ -42,6 +42,7 @@ const POS = () => {
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [cashTendered, setCashTendered] = useState('');
+  const [creditAmountPaid, setCreditAmountPaid] = useState('');
 
   // Modals
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
@@ -53,6 +54,8 @@ const POS = () => {
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
+  const [customerBalanceType, setCustomerBalanceType] = useState('OUTSTANDING');
+  const [customerBalanceAmount, setCustomerBalanceAmount] = useState('');
   const [errors, setErrors] = useState({});
 
   // Fetch products with corrected categoryId param
@@ -95,6 +98,8 @@ const POS = () => {
       setCustomerName('');
       setCustomerPhone('');
       setCustomerAddress('');
+      setCustomerBalanceType('OUTSTANDING');
+      setCustomerBalanceAmount('');
       setErrors({});
     },
     onError: (err) => {
@@ -116,6 +121,7 @@ const POS = () => {
       setDiscount(0);
       setSelectedCustomerId('');
       setCashTendered('');
+      setCreditAmountPaid('');
       setShowCheckoutModal(false);
       setShowReceiptModal(true);
     },
@@ -146,15 +152,30 @@ const POS = () => {
   };
 
   const updateQuantity = (productId, newQty, maxStock) => {
-    if (newQty <= 0) {
+    if (newQty === '') {
+      setCart(prev => prev.map(item => item.id === productId ? { ...item, quantity: '' } : item));
+      return;
+    }
+    const num = parseFloat(newQty);
+    if (isNaN(num) || num <= 0) {
       removeFromCart(productId);
       return;
     }
-    if (newQty > maxStock) {
+    if (num > maxStock) {
       toast.error(`Cannot exceed available stock of ${maxStock} bags`);
       return;
     }
-    setCart(prev => prev.map(item => item.id === productId ? { ...item, quantity: newQty } : item));
+    setCart(prev => prev.map(item => item.id === productId ? { ...item, quantity: num } : item));
+  };
+
+  const updatePrice = (productId, newPrice) => {
+    if (newPrice === '') {
+      setCart(prev => prev.map(item => item.id === productId ? { ...item, salePrice: '' } : item));
+      return;
+    }
+    const num = parseFloat(newPrice);
+    if (isNaN(num) || num < 0) return;
+    setCart(prev => prev.map(item => item.id === productId ? { ...item, salePrice: num } : item));
   };
 
   const removeFromCart = (productId) => {
@@ -162,7 +183,7 @@ const POS = () => {
   };
 
   // Calculations
-  const subtotal = cart.reduce((sum, item) => sum + (parseFloat(item.salePrice) * item.quantity), 0);
+  const subtotal = cart.reduce((sum, item) => sum + ((parseFloat(item.salePrice) || 0) * (parseFloat(item.quantity) || 0)), 0);
   const discountAmount = (subtotal * parseFloat(discount || 0)) / 100;
   const total = Math.max(0, subtotal - discountAmount);
   const changeDue = cashTendered ? Math.max(0, parseFloat(cashTendered) - total) : 0;
@@ -222,10 +243,14 @@ const POS = () => {
       return;
     }
 
+    const amountVal = parseFloat(customerBalanceAmount) || 0;
+    const signedBalance = customerBalanceType === 'ADVANCE' ? -amountVal : amountVal;
+
     createCustomerMutation.mutate({
       name: customerName,
       phone: customerPhone,
-      address: customerAddress
+      address: customerAddress,
+      initialBalance: signedBalance
     });
   };
 
@@ -249,17 +274,24 @@ const POS = () => {
       return;
     }
 
+    const cashPaidVal = paymentMethod === 'CREDIT' ? (parseFloat(creditAmountPaid) || 0) : total;
+
+    if (paymentMethod === 'CREDIT' && cashPaidVal > total) {
+      toast.error('Cash paid cannot exceed total bill amount');
+      return;
+    }
+
     const billItems = cart.map(item => ({
       productId: item.id,
-      quantity: item.quantity,
-      unitPrice: parseFloat(item.salePrice)
+      quantity: parseFloat(item.quantity) || 0,
+      unitPrice: parseFloat(item.salePrice) || 0
     }));
 
     const payload = {
       customerId: selectedCustomerId ? parseInt(selectedCustomerId) : undefined,
       discount: discountAmount,
       paymentMethod,
-      amountPaid: paymentMethod === 'CREDIT' ? 0 : total,
+      amountPaid: cashPaidVal,
       items: billItems
     };
 
@@ -331,7 +363,7 @@ const POS = () => {
             </div>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 overflow-y-auto max-h-[calc(100vh-250px)] pr-2">
+          <div className="flex flex-col gap-3 overflow-y-auto max-h-[calc(100vh-250px)] pr-2">
             {filteredProducts.map((p) => {
               const outOfStock = parseFloat(p.stockQty) <= 0;
               const lowStock = parseFloat(p.stockQty) <= parseFloat(p.lowStockAlert);
@@ -340,39 +372,40 @@ const POS = () => {
                   key={p.id}
                   onClick={() => !outOfStock && addToCart(p)}
                   className={`
-                    group relative rounded-2xl bg-white/5 border border-white/5 p-5 
-                    cursor-pointer transition-all duration-300 hover:bg-white/10 hover:scale-[1.03] hover:shadow-lg hover:shadow-black/20
+                    group flex items-center justify-between gap-4 rounded-xl bg-white/5 border border-white/5 p-3.5
+                    cursor-pointer transition-all duration-200 hover:bg-white/10 hover:translate-x-1
                     ${outOfStock ? 'opacity-40 cursor-not-allowed' : ''}
                   `}
                 >
-                  <div className="flex justify-between items-start gap-3">
-                    <h3 className="font-bold text-white text-sm tracking-wide line-clamp-2">{p.name}</h3>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-bold text-white text-sm tracking-wide truncate">{p.name}</h3>
+                    <p className="text-[10px] text-slate-500 font-mono tracking-wider mt-0.5 uppercase">{p.sku}</p>
                   </div>
-                  <p className="text-[10px] text-slate-500 font-mono tracking-wider mt-1.5 uppercase">{p.sku}</p>
 
-                  <div className="mt-4 flex justify-between items-end">
-                    <div className="space-y-1">
-                      <p className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Price</p>
-                      <span className="text-emerald-400 font-extrabold text-base leading-none">
+                  <div className="flex items-center gap-6">
+                    <div className="text-right">
+                      <Badge variant={outOfStock ? 'danger' : lowStock ? 'warning' : 'success'} size="sm">
+                        {p.stockQty} bags
+                      </Badge>
+                    </div>
+
+                    <div className="min-w-[100px] text-right">
+                      <p className="text-slate-500 text-[9px] uppercase font-bold tracking-wider mb-0.5">Price</p>
+                      <span className="text-emerald-400 font-extrabold text-sm">
                         {formatCurrency(p.salePrice)}
                       </span>
                     </div>
 
-                    <div className="text-right">
-                      <Badge variant={outOfStock ? 'danger' : lowStock ? 'warning' : 'success'} size="sm" className="mb-1">
-                        {p.stockQty} bags
-                      </Badge>
-
-                      <button
-                        className={`
-                          w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 
-                          flex items-center justify-center ml-auto group-hover:bg-emerald-500 group-hover:text-white transition-all duration-200
-                          ${outOfStock ? 'pointer-events-none' : ''}
-                        `}
-                      >
-                        <Plus size={16} />
-                      </button>
-                    </div>
+                    <button
+                      className={`
+                        w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 
+                        flex items-center justify-center group-hover:bg-emerald-500 group-hover:text-white transition-all duration-200
+                        ${outOfStock ? 'pointer-events-none' : ''}
+                      `}
+                      aria-label="Add to cart"
+                    >
+                      <Plus size={16} />
+                    </button>
                   </div>
                 </div>
               );
@@ -444,20 +477,37 @@ const POS = () => {
                 <div key={item.id} className="flex items-center justify-between gap-3 p-3.5 bg-white/5 border border-white/5 rounded-2xl hover:bg-white/10 transition-colors">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-white truncate">{item.name}</p>
-                    <p className="text-xs text-slate-500 mt-1 font-mono">{formatCurrency(item.salePrice)} / bag</p>
+                    <div className="flex items-center gap-1 mt-1 bg-slate-950/20 border border-white/5 rounded-lg px-2 py-0.5 w-max">
+                      <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Price:</span>
+                      <span className="text-[11px] text-slate-400 font-semibold">Rs.</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={item.salePrice}
+                        onChange={(e) => updatePrice(item.id, e.target.value)}
+                        className="w-16 bg-transparent text-white focus:outline-none border-none text-xs font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      />
+                    </div>
                   </div>
 
                   {/* Quantity Controls */}
                   <div className="flex items-center gap-1 bg-slate-950/40 border border-white/10 rounded-xl p-1">
                     <button
-                      onClick={() => updateQuantity(item.id, item.quantity - 1, item.stockQty)}
+                      onClick={() => updateQuantity(item.id, (parseFloat(item.quantity) || 0) - 1, item.stockQty)}
                       className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
                     >
                       <Minus size={12} />
                     </button>
-                    <span className="text-sm font-bold text-white px-2 min-w-[24px] text-center">{item.quantity}</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max={item.stockQty}
+                      value={item.quantity}
+                      onChange={(e) => updateQuantity(item.id, e.target.value, item.stockQty)}
+                      className="w-8 text-center bg-transparent text-white focus:outline-none border-none text-xs font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
                     <button
-                      onClick={() => updateQuantity(item.id, item.quantity + 1, item.stockQty)}
+                      onClick={() => updateQuantity(item.id, (parseFloat(item.quantity) || 0) + 1, item.stockQty)}
                       className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
                     >
                       <Plus size={12} />
@@ -466,7 +516,7 @@ const POS = () => {
 
                   <div className="text-right min-w-[80px] pr-1">
                     <p className="text-sm font-bold text-white">
-                      {formatCurrency(parseFloat(item.salePrice) * item.quantity)}
+                      {formatCurrency((parseFloat(item.salePrice) || 0) * (parseFloat(item.quantity) || 0))}
                     </p>
                   </div>
 
@@ -518,7 +568,7 @@ const POS = () => {
                 variant="primary"
                 className="w-full !py-3.5 !rounded-2xl font-bold uppercase tracking-wider text-sm mt-1"
                 disabled={cart.length === 0}
-                onClick={() => { setErrors({}); setShowCheckoutModal(true); }}
+                onClick={() => { setErrors({}); setCreditAmountPaid(''); setShowCheckoutModal(true); }}
               >
                 Checkout & Pay
               </Button>
@@ -568,15 +618,50 @@ const POS = () => {
             </div>
 
             {paymentMethod === 'CREDIT' && (
-              <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl">
-                <p className="text-xs text-amber-300 font-medium leading-relaxed">
-                  ⚠️ Credit/Udhar is selected. Customer profile is REQUIRED. The total bill amount will be added to the customer's outstanding balance.
-                </p>
-                {!selectedCustomerId && (
-                  <p className="text-xs text-red-400 font-bold mt-2.5">
-                    Please select a customer on the cart panel before checking out.
+              <div className="space-y-4">
+                <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl space-y-3">
+                  <p className="text-xs text-amber-300 font-medium leading-relaxed">
+                    ⚠️ Credit/Udhar is selected. Customer profile is REQUIRED.
                   </p>
-                )}
+                  {!selectedCustomerId ? (
+                    <p className="text-xs text-red-400 font-bold">
+                      Please select a customer on the cart panel before checking out.
+                    </p>
+                  ) : (
+                    <div className="space-y-3 pt-1 border-t border-amber-500/10">
+                      <Input
+                        id="credit-cash-paid"
+                        label="Cash Paid (Down Payment)"
+                        type="number"
+                        placeholder="Enter cash received (if any)..."
+                        value={creditAmountPaid}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === '' || (parseFloat(val) >= 0 && parseFloat(val) <= total)) {
+                            setCreditAmountPaid(val);
+                            setErrors(prev => ({ ...prev, creditAmountPaid: null }));
+                          } else {
+                            setErrors(prev => ({ ...prev, creditAmountPaid: `Amount cannot exceed the total bill of Rs. ${total.toLocaleString()}` }));
+                          }
+                        }}
+                        error={errors.creditAmountPaid}
+                        icon={DollarSign}
+                        className="!py-3 !rounded-xl"
+                      />
+                      
+                      <div className="flex flex-col gap-1.5 pt-2 border-t border-white/5 text-xs font-semibold">
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Paid in Cash:</span>
+                          <span className="text-white">Rs. {(parseFloat(creditAmountPaid) || 0).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between text-amber-400">
+                          <span>Going to Credit (Udhar):</span>
+                          <span>Rs. {Math.max(0, total - (parseFloat(creditAmountPaid) || 0)).toLocaleString()}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -676,6 +761,29 @@ const POS = () => {
               value={customerAddress}
               onChange={(e) => setCustomerAddress(e.target.value)}
             />
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Select
+                id="cust-balance-type"
+                label="Initial Balance Type"
+                options={[
+                  { value: 'OUTSTANDING', label: 'Outstanding Udhar (Owed to Shop)' },
+                  { value: 'ADVANCE', label: 'Advance Payment (Paid to Shop)' }
+                ]}
+                value={customerBalanceType}
+                onChange={(e) => setCustomerBalanceType(e.target.value)}
+              />
+              <Input
+                id="cust-balance-amount"
+                label="Initial Balance Amount (PKR)"
+                type="number"
+                min="0"
+                icon={Landmark}
+                placeholder="e.g. 5000"
+                value={customerBalanceAmount}
+                onChange={(e) => setCustomerBalanceAmount(e.target.value)}
+              />
+            </div>
 
           </form>
         </Modal>
@@ -747,6 +855,12 @@ const POS = () => {
 
                 {latestBill.paymentMethod === 'CREDIT' ? (
                   <div className="space-y-1 border-t border-dashed border-gray-300 pt-1 text-[10px]">
+                    {parseFloat(latestBill.amountPaid) > 0 && (
+                      <div className="flex justify-between text-gray-600 font-semibold">
+                        <span>Down Payment (Cash):</span>
+                        <span>Rs. {parseFloat(latestBill.amountPaid).toLocaleString()}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between text-red-600 font-semibold">
                       <span>Credit Added:</span>
                       <span>Rs. {parseFloat(latestBill.creditAmount).toLocaleString()}</span>

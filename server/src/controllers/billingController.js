@@ -102,6 +102,16 @@ export const createBill = async (req, res, next) => {
 
       const billNo = await generateBillNo();
 
+      // If CREDIT, update customer balance first so the included customer relation gets the updated credit balance
+      if (paymentMethod === 'CREDIT' && creditAmount > 0) {
+        await tx.customer.update({
+          where: { id: customerId },
+          data: {
+            creditBalance: { increment: creditAmount },
+          },
+        });
+      }
+
       // Create the bill
       const bill = await tx.bill.create({
         data: {
@@ -127,15 +137,8 @@ export const createBill = async (req, res, next) => {
         },
       });
 
-      // If CREDIT, update customer balance and create credit transaction
+      // If CREDIT, create credit transaction
       if (paymentMethod === 'CREDIT' && creditAmount > 0) {
-        await tx.customer.update({
-          where: { id: customerId },
-          data: {
-            creditBalance: { increment: creditAmount },
-          },
-        });
-
         await tx.creditTransaction.create({
           data: {
             customerId,

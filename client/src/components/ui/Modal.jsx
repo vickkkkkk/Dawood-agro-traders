@@ -40,7 +40,7 @@ const Modal = ({
     <div id={id} className="modal-overlay">
       {/* Modal Content */}
       <div className={`modal-content ${sizeClasses[size] || ''}`}>
-        
+
         {/* Header */}
         {title && (
           <div className="modal-header-premium">

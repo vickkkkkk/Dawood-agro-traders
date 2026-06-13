@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 export const getCreditSummary = async (req, res, next) => {
   try {
     const customers = await prisma.customer.findMany({
-      where: { creditBalance: { gt: 0 } },
+      where: { creditBalance: { not: 0 } },
       orderBy: { creditBalance: 'desc' },
       select: {
         id: true,
@@ -17,10 +17,9 @@ export const getCreditSummary = async (req, res, next) => {
       },
     });
 
-    const totalOutstanding = customers.reduce(
-      (sum, c) => sum + Number(c.creditBalance),
-      0
-    );
+    const totalOutstanding = customers
+      .filter((c) => c.creditBalance > 0)
+      .reduce((sum, c) => sum + Number(c.creditBalance), 0);
 
     res.json({
       success: true,
@@ -104,17 +103,10 @@ export const recordPayment = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Customer not found.' });
     }
 
-    if (Number(customer.creditBalance) <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Customer has no outstanding credit.',
-      });
-    }
-
-    const paymentAmount = Math.min(Number(amount), Number(customer.creditBalance));
+    const paymentAmount = Number(amount);
 
     const result = await prisma.$transaction(async (tx) => {
-      // Reduce customer balance
+      // Reduce customer balance (could make it negative if payment exceeds debt)
       const updatedCustomer = await tx.customer.update({
         where: { id: Number(customerId) },
         data: {
