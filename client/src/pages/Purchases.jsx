@@ -28,8 +28,6 @@ const Purchases = () => {
   
   // Lists filters state
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const limit = 10;
 
   // Modals state
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
@@ -52,12 +50,10 @@ const Purchases = () => {
 
   // Fetch Purchases
   const { data: purchasesData, isLoading: purchasesLoading, isFetching: purchasesFetching } = useQuery({
-    queryKey: ['purchases', search, page],
-    queryFn: () => getPurchases({ page, limit, search, sort: '-createdAt' }),
+    queryKey: ['purchases', search],
+    queryFn: () => getPurchases({ page: 1, limit: 9999, search, sort: '-createdAt' }),
   });
   const purchases = Array.isArray(purchasesData?.data) ? purchasesData.data : (purchasesData?.data?.purchases || purchasesData?.purchases || []);
-  const totalPurchases = purchasesData?.pagination?.total || purchasesData?.data?.total || purchasesData?.total || 0;
-  const totalPages = Math.max(1, Math.ceil(totalPurchases / limit));
 
   // Fetch Suppliers
   const { data: suppliersData } = useQuery({
@@ -281,7 +277,7 @@ const Purchases = () => {
               id="purchases-search"
               placeholder="Search by GRN number..."
               value={search}
-              onChange={(val) => { setSearch(val); setPage(1); }}
+              onChange={(val) => setSearch(val)}
             />
           </div>
           <div className="flex gap-2 w-full sm:w-auto">
@@ -307,13 +303,12 @@ const Purchases = () => {
 
       {/* Main Table */}
       <Card padding={false}>
+        <div style={{ maxHeight: 'calc(100vh - 220px)', overflowY: 'auto' }}>
         <Table
           id="purchases-table"
           loading={purchasesLoading || purchasesFetching}
           headers={['GRN Number', 'Date', 'Supplier', 'Items Qty', 'Total Bill', 'Status', 'Actions']}
-          onPageChange={setPage}
-          currentPage={page}
-          totalPages={totalPages}
+          showPagination={false}
         >
           {purchases.length > 0 ? (
             purchases.map((pur) => (
@@ -357,6 +352,7 @@ const Purchases = () => {
             </tr>
           )}
         </Table>
+        </div>
       </Card>
 
       {/* Record Purchase Modal */}

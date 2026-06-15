@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useLocation } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import {
@@ -39,10 +39,18 @@ const Inventory = () => {
 
   // Search & Filter State
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [stockStatusFilter, setStockStatusFilter] = useState('');
-  const [page, setPage] = useState(1);
-  const limit = 10;
+  // Debounce search input
+  const searchTimerRef = useRef(null);
+  const handleSearchChange = useCallback((val) => {
+    setSearch(val);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      setDebouncedSearch(val);
+    }, 400);
+  }, []);
 
   // Modals state
   const [showProductModal, setShowProductModal] = useState(false);
@@ -71,18 +79,17 @@ const Inventory = () => {
 
   // Fetch Products
   const { data: productsData, isLoading: productsLoading, isFetching: productsFetching } = useQuery({
-    queryKey: ['products', search, categoryFilter, stockStatusFilter, page],
+    queryKey: ['products', debouncedSearch, categoryFilter, stockStatusFilter],
     queryFn: () => getProducts({
-      page,
-      limit,
-      search,
+      page: 1,
+      limit: 9999,
+      search: debouncedSearch,
       category: categoryFilter,
       stockStatus: stockStatusFilter
     }),
+    placeholderData: keepPreviousData,
   });
   const products = Array.isArray(productsData?.data) ? productsData.data : (productsData?.data?.products || productsData?.products || []);
-  const totalProducts = productsData?.pagination?.total || productsData?.data?.total || productsData?.total || 0;
-  const totalPages = Math.max(1, Math.ceil(totalProducts / limit));
 
   // Fetch Categories
   const { data: categoriesData } = useQuery({
@@ -414,31 +421,31 @@ const Inventory = () => {
 
       {/* Main control panel */}
       <Card compact>
-        <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-1 w-full">
+        <div className="flex flex-col md:flex-row gap-6 items-center justify-between">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 flex-1 w-full">
             <SearchBar
               id="inventory-search"
               placeholder="Search products by name/SKU..."
               value={search}
-              onChange={(val) => { setSearch(val); setPage(1); }}
+              onChange={handleSearchChange}
             />
             <Select
               id="inventory-category"
               options={categoryFilterOptions}
               className="pos-filter-input pos-filter-select"
               value={categoryFilter}
-              onChange={(e) => { setCategoryFilter(e.target.value); setPage(1); }}
+              onChange={(e) => setCategoryFilter(e.target.value)}
             />
             <Select
               id="inventory-stock-status"
               options={stockStatusOptions}
               className="pos-filter-input pos-filter-select"
               value={stockStatusFilter}
-              onChange={(e) => { setStockStatusFilter(e.target.value); setPage(1); }}
+              onChange={(e) => setStockStatusFilter(e.target.value)}
             />
           </div>
 
-          <div className="flex gap-2 w-full md:w-auto">
+          <div className="flex gap-3 w-full md:w-auto">
             <Button
               variant="secondary"
               onClick={() => setShowCategoryModal(true)}
@@ -461,13 +468,12 @@ const Inventory = () => {
 
       {/* Table */}
       <Card padding={false}>
+        <div style={{ maxHeight: 'calc(100vh - 220px)', overflowY: 'auto' }}>
         <Table
           id="products-table"
           loading={productsLoading || productsFetching}
           headers={['Product Name', 'Category', 'Purchase Price', 'Sale Price', 'Stock Qty', 'Low Stock Alert', 'Batch / Expiry', 'Actions']}
-          onPageChange={setPage}
-          currentPage={page}
-          totalPages={totalPages}
+          showPagination={false}
         >
           {products.length > 0 ? (
             products.map((p) => {
@@ -533,6 +539,7 @@ const Inventory = () => {
             </tr>
           )}
         </Table>
+        </div>
       </Card>
 
       {/* Add / Edit Product Modal */}
@@ -604,7 +611,8 @@ const Inventory = () => {
                 options={[
                   { value: 'bags', label: 'Bags' },
                   { value: 'bottles', label: 'Bottles' },
-                  { value: 'sacks', label: 'Sacks' }
+                  { value: 'sacks', label: 'Sacks' },
+                  { value: 'kg', label: 'KG' }
                 ]}
                 value={unit}
                 onChange={(e) => setUnit(e.target.value)}

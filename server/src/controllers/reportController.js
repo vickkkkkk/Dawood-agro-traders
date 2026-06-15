@@ -5,20 +5,29 @@ const prisma = new PrismaClient();
 // GET /api/reports/dashboard
 export const getDashboard = async (req, res, next) => {
   try {
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, month, year } = req.query;
 
     // Default to today
     const today = new Date();
     const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
 
-    // Period filter (default: current month)
-    const periodStart = startDate
-      ? new Date(startDate)
-      : new Date(today.getFullYear(), today.getMonth(), 1);
-    const periodEnd = endDate
-      ? (() => { const d = new Date(endDate); d.setHours(23, 59, 59, 999); return d; })()
-      : todayEnd;
+    let periodStart;
+    let periodEnd;
+
+    if (month || year) {
+      const targetYear = Number(year) || today.getFullYear();
+      const targetMonth = Number(month) || today.getMonth() + 1;
+      periodStart = new Date(targetYear, targetMonth - 1, 1);
+      periodEnd = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
+    } else {
+      periodStart = startDate
+        ? new Date(startDate)
+        : new Date(today.getFullYear(), today.getMonth(), 1);
+      periodEnd = endDate
+        ? (() => { const d = new Date(endDate); d.setHours(23, 59, 59, 999); return d; })()
+        : todayEnd;
+    }
 
     // Today's sales
     const todayBills = await prisma.bill.findMany({
@@ -26,9 +35,9 @@ export const getDashboard = async (req, res, next) => {
         billDate: { gte: todayStart, lte: todayEnd },
         isVoid: false,
       },
-      select: { total: true },
+      select: { total: true, amountPaid: true, creditAmount: true, paymentMethod: true },
     });
-    const todaySales = todayBills.reduce((sum, b) => sum + Number(b.total), 0);
+    const todaySales = todayBills.reduce((sum, b) => sum + Number(b.paymentMethod === 'CREDIT' ? b.total : b.amountPaid), 0);
     const todayBillCount = todayBills.length;
 
     // Period sales
@@ -37,23 +46,27 @@ export const getDashboard = async (req, res, next) => {
         billDate: { gte: periodStart, lte: periodEnd },
         isVoid: false,
       },
-      select: { total: true, paymentMethod: true },
+      select: { total: true, paymentMethod: true, amountPaid: true, creditAmount: true },
     });
 
-    const totalSales = periodBills.reduce((sum, b) => sum + Number(b.total), 0);
-    const billCount = periodBills.length;
-
     const cashPayments = periodBills
-      .filter((b) => b.paymentMethod?.toUpperCase() === 'CASH')
-      .reduce((sum, b) => sum + Number(b.total), 0);
+      .reduce((sum, b) => {
+        if (b.paymentMethod?.toUpperCase() === 'CASH' || b.paymentMethod?.toUpperCase() === 'CREDIT') {
+          return sum + Number(b.amountPaid);
+        }
+        return sum;
+      }, 0);
 
     const onlinePayments = periodBills
       .filter((b) => ['JAZZCASH', 'EASYPAISA', 'BANK_TRANSFER'].includes(b.paymentMethod?.toUpperCase()))
-      .reduce((sum, b) => sum + Number(b.total), 0);
+      .reduce((sum, b) => sum + Number(b.amountPaid), 0);
 
     const creditPayments = periodBills
       .filter((b) => b.paymentMethod?.toUpperCase() === 'CREDIT')
-      .reduce((sum, b) => sum + Number(b.total), 0);
+      .reduce((sum, b) => sum + Number(b.creditAmount), 0);
+
+    const totalSales = cashPayments + onlinePayments + creditPayments;
+    const billCount = periodBills.length;
 
     // Total stock value
     const products = await prisma.product.findMany({
@@ -128,6 +141,8 @@ export const getDailySales = async (req, res, next) => {
         total: true,
         paymentMethod: true,
         discount: true,
+        amountPaid: true,
+        creditAmount: true,
       },
       orderBy: { billDate: 'asc' },
     });
@@ -146,17 +161,26 @@ export const getDailySales = async (req, res, next) => {
           totalDiscount: 0,
         };
       }
-      dailyMap[dateKey].total += Number(bill.total);
       dailyMap[dateKey].billCount += 1;
       dailyMap[dateKey].totalDiscount += Number(bill.discount);
       
+      let billCash = 0;
+      let billOnline = 0;
+      let billCredit = 0;
+
       if (bill.paymentMethod === 'CASH') {
-        dailyMap[dateKey].cash += Number(bill.total);
+        billCash = Number(bill.amountPaid);
       } else if (bill.paymentMethod === 'CREDIT') {
-        dailyMap[dateKey].credit += Number(bill.total);
+        billCash = Number(bill.amountPaid);
+        billCredit = Number(bill.creditAmount);
       } else if (['JAZZCASH', 'EASYPAISA', 'BANK_TRANSFER'].includes(bill.paymentMethod)) {
-        dailyMap[dateKey].online += Number(bill.total);
+        billOnline = Number(bill.amountPaid);
       }
+
+      dailyMap[dateKey].cash += billCash;
+      dailyMap[dateKey].online += billOnline;
+      dailyMap[dateKey].credit += billCredit;
+      dailyMap[dateKey].total += (billCash + billOnline + billCredit);
     }
 
     res.json({
@@ -188,6 +212,8 @@ export const getMonthlySales = async (req, res, next) => {
         billDate: true,
         total: true,
         paymentMethod: true,
+        amountPaid: true,
+        creditAmount: true,
       },
       orderBy: { billDate: 'asc' },
     });
@@ -209,13 +235,24 @@ export const getMonthlySales = async (req, res, next) => {
     for (const bill of bills) {
       const month = bill.billDate.getMonth() + 1;
       const key = `${targetYear}-${String(month).padStart(2, '0')}`;
-      monthlyMap[key].totalSales += Number(bill.total);
-      monthlyMap[key].billCount += 1;
+      
+      let billCash = 0;
+      let billOnline = 0;
+      let billCredit = 0;
+
       if (bill.paymentMethod === 'CASH') {
-        monthlyMap[key].cashSales += Number(bill.total);
+        billCash = Number(bill.amountPaid);
       } else if (bill.paymentMethod === 'CREDIT') {
-        monthlyMap[key].creditSales += Number(bill.total);
+        billCash = Number(bill.amountPaid);
+        billCredit = Number(bill.creditAmount);
+      } else if (['JAZZCASH', 'EASYPAISA', 'BANK_TRANSFER'].includes(bill.paymentMethod)) {
+        billOnline = Number(bill.amountPaid);
       }
+
+      monthlyMap[key].cashSales += billCash;
+      monthlyMap[key].creditSales += billCredit;
+      monthlyMap[key].totalSales += (billCash + billOnline + billCredit);
+      monthlyMap[key].billCount += 1;
     }
 
     res.json({

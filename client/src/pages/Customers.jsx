@@ -19,8 +19,6 @@ const Customers = () => {
   
   // List State
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const limit = 10;
 
   // Selected customer for detail view
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
@@ -40,12 +38,10 @@ const Customers = () => {
 
   // Fetch Customers
   const { data: customersData, isLoading, isFetching } = useQuery({
-    queryKey: ['customers', search, page],
-    queryFn: () => getCustomers({ page, limit, search, sort: '-createdAt' }),
+    queryKey: ['customers', search],
+    queryFn: () => getCustomers({ page: 1, limit: 9999, search, sort: '-createdAt' }),
   });
   const customers = Array.isArray(customersData?.data) ? customersData.data : (customersData?.data?.customers || customersData?.customers || []);
-  const totalCustomers = customersData?.pagination?.total || customersData?.data?.total || customersData?.total || 0;
-  const totalPages = Math.max(1, Math.ceil(totalCustomers / limit));
 
   // Fetch Single Customer Detail (on-demand)
   const { data: customerDetailData, isLoading: detailLoading } = useQuery({
@@ -185,7 +181,7 @@ const Customers = () => {
               id="customers-search"
               placeholder="Search customers by name or phone..."
               value={search}
-              onChange={(val) => { setSearch(val); setPage(1); }}
+              onChange={(val) => setSearch(val)}
             />
           </div>
           <Button
@@ -202,13 +198,12 @@ const Customers = () => {
 
       {/* List Table */}
       <Card padding={false}>
+        <div style={{ maxHeight: 'calc(100vh - 220px)', overflowY: 'auto' }}>
         <Table
           id="customers-table"
           loading={isLoading || isFetching}
           headers={['Name', 'Phone Number', 'Address', 'Credit Balance (Udhar)', 'Registration Date', 'Actions']}
-          onPageChange={setPage}
-          currentPage={page}
-          totalPages={totalPages}
+          showPagination={false}
         >
           {customers.length > 0 ? (
             customers.map((c) => (
@@ -261,6 +256,7 @@ const Customers = () => {
             </tr>
           )}
         </Table>
+        </div>
       </Card>
 
       {/* Add / Edit Form Modal */}

@@ -59,7 +59,7 @@ export const getPurchases = async (req, res, next) => {
     }
 
     if (search) {
-      where.grnNo = { contains: search, mode: 'insensitive' };
+      where.grnNo = { contains: search };
     }
 
     const [purchases, total] = await Promise.all([
@@ -215,8 +215,8 @@ export const getSuppliers = async (req, res, next) => {
 
     if (search) {
       where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { company: { contains: search, mode: 'insensitive' } },
+        { name: { contains: search } },
+        { company: { contains: search } },
       ];
     }
 

@@ -11,8 +11,8 @@ export const getCustomers = async (req, res, next) => {
 
     if (search) {
       where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { phone: { contains: search, mode: 'insensitive' } },
+        { name: { contains: search } },
+        { phone: { contains: search } },
       ];
     }
 

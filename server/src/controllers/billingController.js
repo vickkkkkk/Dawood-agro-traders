@@ -98,7 +98,9 @@ export const createBill = async (req, res, next) => {
       const total = subtotal - Number(discount);
       const paymentStatus = paymentMethod === 'CREDIT' ? 'CREDIT' : 'PAID';
       const creditAmount = paymentMethod === 'CREDIT' ? total - Number(amountPaid) : 0;
-      const finalAmountPaid = paymentMethod === 'CREDIT' ? Number(amountPaid) : total;
+      const finalAmountPaid = paymentMethod === 'CREDIT'
+        ? Number(amountPaid)
+        : (amountPaid !== undefined ? Math.max(0, Math.min(total, Number(amountPaid))) : total);
 
       const billNo = await generateBillNo();
 
@@ -199,7 +201,7 @@ export const getBills = async (req, res, next) => {
     }
 
     if (search) {
-      where.billNo = { contains: search, mode: 'insensitive' };
+      where.billNo = { contains: search };
     }
 
     const [bills, total] = await Promise.all([

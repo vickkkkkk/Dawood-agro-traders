@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   TrendingUp, Package, CreditCard, Banknote,
   Smartphone, BarChart3, ArrowUpRight, ArrowDownRight,
-  Calendar,
+  Calendar, Printer, RefreshCw,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -13,9 +13,11 @@ import Card from '../components/ui/Card';
 import Badge from '../components/ui/Badge';
 import Select from '../components/ui/Select';
 import Table from '../components/ui/Table';
+import Modal from '../components/ui/Modal';
+import Button from '../components/ui/Button';
 import { SectionLoader } from '../components/ui/LoadingSpinner';
 import { getDashboard, getDailySales } from '../api/reports';
-import { getBills } from '../api/billing';
+import { getBills, getBillById } from '../api/billing';
 import { formatCurrency } from '../utils/formatCurrency';
 import { formatDate, formatDateTime } from '../utils/formatDate';
 import { MONTHS, PAYMENT_METHOD_LABELS, BILL_STATUS_COLORS } from '../utils/constants';
@@ -71,6 +73,24 @@ const Dashboard = () => {
   const currentDate = new Date();
   const [month, setMonth] = useState(currentDate.getMonth() + 1);
   const [year, setYear] = useState(currentDate.getFullYear());
+  const [selectedBill, setSelectedBill] = useState(null);
+  const [showViewModal, setShowViewModal] = useState(false);
+
+  const { data: selectedBillDetailsData, isLoading: isLoadingBill } = useQuery({
+    queryKey: ['bill-details', selectedBill?._id || selectedBill?.id],
+    queryFn: () => getBillById(selectedBill?._id || selectedBill?.id),
+    enabled: !!(selectedBill?._id || selectedBill?.id),
+  });
+
+  const selectedBillDetails = selectedBillDetailsData?.data;
+
+  const handlePrint = () => {
+    const printContent = document.getElementById('receipt-print-area').innerHTML;
+    const originalContent = document.body.innerHTML;
+    document.body.innerHTML = printContent;
+    window.print();
+    window.location.reload();
+  };
 
   const { data: dashboardData, isLoading: dashboardLoading } = useQuery({
     queryKey: ['dashboard', month, year],
@@ -82,9 +102,18 @@ const Dashboard = () => {
     queryFn: () => getDailySales(month, year),
   });
 
+  const startDateStr = `${year}-${String(month).padStart(2, '0')}-01`;
+  const lastDay = new Date(year, month, 0).getDate();
+  const endDateStr = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
   const { data: recentBillsData, isLoading: billsLoading } = useQuery({
-    queryKey: ['recentBills'],
-    queryFn: () => getBills({ limit: 10, sort: '-createdAt' }),
+    queryKey: ['recentBills', month, year],
+    queryFn: () => getBills({
+      limit: 10,
+      startDate: startDateStr,
+      endDate: endDateStr,
+      sort: '-createdAt'
+    }),
   });
 
   const stats = dashboardData?.data || dashboardData || {};
@@ -142,14 +171,14 @@ const Dashboard = () => {
         />
         <StatCard
           title="Total Stock Value"
-          value={formatCurrency(stats.stockValue || 0)}
+          value={formatCurrency(stats.totalStockValue || 0)}
           icon={Package}
           gradient="bg-gradient-to-br from-blue-600/20 to-blue-800/20 border-blue-500/20"
           iconBg="bg-gradient-to-br from-blue-400 to-blue-600 shadow-lg shadow-blue-500/20"
         />
         <StatCard
           title="Outstanding Credits"
-          value={formatCurrency(stats.outstandingCredits || 0)}
+          value={formatCurrency(stats.totalCredits || 0)}
           icon={CreditCard}
           gradient="bg-gradient-to-br from-amber-600/20 to-amber-800/20 border-amber-500/20"
           iconBg="bg-gradient-to-br from-amber-400 to-amber-600 shadow-lg shadow-amber-500/20"
@@ -223,20 +252,31 @@ const Dashboard = () => {
                 return (
                   <tr key={bill._id || bill.id}>
                     <td>
-                      <span className="text-emerald-400 font-mono">{bill.billNumber || bill.billNo || '-'}</span>
+                      <button
+                        onClick={() => {
+                          setSelectedBill({
+                            id: bill._id || bill.id,
+                            billNo: bill.billNumber || bill.billNo || '-'
+                          });
+                          setShowViewModal(true);
+                        }}
+                        className="text-emerald-400 font-mono hover:underline focus:outline-none text-left cursor-pointer font-semibold bg-transparent border-none p-0"
+                      >
+                        {bill.billNumber || bill.billNo || '-'}
+                      </button>
                     </td>
                     <td>
                       {bill.customer?.name || bill.customerName || 'Walk-in'}
                     </td>
                     <td className="text-white font-medium">
-                      {formatCurrency(bill.total || bill.totalAmount || 0)}
+                      {formatCurrency(bill.amountPaid !== undefined ? bill.amountPaid : (bill.total || bill.totalAmount || 0))}
                     </td>
                     <td>
                       <Badge
                         variant={
                           bill.status === 'PAID' ? 'success' :
-                          bill.status === 'PARTIAL' ? 'warning' :
-                          bill.status === 'CREDIT' ? 'danger' : 'default'
+                            bill.status === 'PARTIAL' ? 'warning' :
+                              bill.status === 'CREDIT' ? 'danger' : 'default'
                         }
                         size="sm"
                       >
@@ -250,6 +290,124 @@ const Dashboard = () => {
           </Table>
         </Card>
       </div>
+
+      {/* Bill View Modal */}
+      {showViewModal && selectedBill && (
+        <Modal
+          id="view-bill-modal"
+          title={`Bill Details: ${selectedBill.billNo}`}
+          onClose={() => setShowViewModal(false)}
+        >
+          {isLoadingBill ? (
+            <div className="flex justify-center items-center py-12">
+              <RefreshCw className="w-8 h-8 text-emerald-500 animate-spin" />
+              <span className="ml-2 text-sm text-slate-400">Loading bill details...</span>
+            </div>
+          ) : selectedBillDetails ? (
+            <div className="space-y-6">
+              <div
+                id="receipt-print-area"
+                className="bg-white text-black p-6 rounded-xl font-sans text-xs max-w-sm mx-auto shadow-inner"
+              >
+                <div className="text-center space-y-1 mb-4 border-b border-dashed border-gray-400 pb-3">
+                  <h2 className="text-sm font-bold tracking-wide">DAWOOD AGRO TRADERS</h2>
+                  <p className="text-[10px] text-gray-600">Jatoi Road Near Zrai Bank Shah Jamal</p>
+                  <p className="text-[10px] text-gray-600">Phone: 0340-0736201, 0302-7338805</p>
+                  <p className="text-[10px] font-mono mt-2 text-gray-700">INVOICE: {selectedBillDetails.billNo}</p>
+                  <p className="text-[9px] text-gray-500">Date: {new Date(selectedBillDetails.billDate).toLocaleString('en-PK')}</p>
+                </div>
+
+                {selectedBillDetails.isVoid && (
+                  <div className="border border-red-500 text-red-500 text-center font-bold text-sm p-1 rounded mb-4 tracking-widest rotate-2">
+                    VOIDED / CANCELLED
+                  </div>
+                )}
+
+                <div className="space-y-1 mb-4 text-left">
+                  <p><span className="font-semibold text-gray-700">Created By:</span> {selectedBillDetails.user?.name || 'Counter Staff'}</p>
+                  <p><span className="font-semibold text-gray-700">Customer:</span> {selectedBillDetails.customer?.name || 'Walk-in'}</p>
+                  {selectedBillDetails.customer?.phone && <p><span className="font-semibold text-gray-700">Phone:</span> {selectedBillDetails.customer.phone}</p>}
+                  <p><span className="font-semibold text-gray-700">Payment:</span> {PAYMENT_METHOD_LABELS[selectedBillDetails.paymentMethod]}</p>
+                </div>
+
+                <table className="w-full border-t border-b border-dashed border-gray-400 py-2 my-2 text-black">
+                  <thead>
+                    <tr className="border-b border-gray-300 font-semibold text-gray-700">
+                      <th className="text-left py-1 font-semibold text-gray-700">Item</th>
+                      <th className="text-center py-1 font-semibold text-gray-700">Qty</th>
+                      <th className="text-right py-1 font-semibold text-gray-700">Price</th>
+                      <th className="text-right py-1 font-semibold text-gray-700">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {selectedBillDetails.items?.map((item, idx) => {
+                      return (
+                        <tr key={idx} className="py-1">
+                          <td className="py-1 text-left text-gray-800">
+                            <div>{item.product?.name || `Product #${item.productId}`}</div>
+                            {parseFloat(item.returnedQuantity || 0) > 0 && (
+                              <div className="text-[10px] text-red-600 font-semibold">
+                                (Returned: {parseFloat(item.returnedQuantity)})
+                              </div>
+                            )}
+                          </td>
+                          <td className="text-center py-1 text-gray-800">{parseFloat(item.quantity)}</td>
+                          <td className="text-right py-1 text-gray-800">{parseFloat(item.unitPrice).toFixed(0)}</td>
+                          <td className="text-right py-1 text-gray-800">{parseFloat(item.total).toFixed(0)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+
+                <div className="space-y-1.5 text-right font-medium mt-4">
+                  <div className="flex justify-between text-gray-700">
+                    <span className="text-gray-600">Subtotal:</span>
+                    <span>Rs. {parseFloat(selectedBillDetails.subtotal).toLocaleString()}</span>
+                  </div>
+                  {parseFloat(selectedBillDetails.discount) > 0 && (
+                    <div className="flex justify-between text-red-600 font-semibold">
+                      <span>Discount:</span>
+                      <span>-Rs. {parseFloat(selectedBillDetails.discount).toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-sm font-bold text-black border-t border-gray-300 pt-1">
+                    <span>Grand Total:</span>
+                    <span>Rs. {parseFloat(selectedBillDetails.total).toLocaleString()}</span>
+                  </div>
+
+                  {selectedBillDetails.paymentMethod === 'CREDIT' ? (
+                    <div className="space-y-1 border-t border-dashed border-gray-300 pt-1 text-[10px]">
+                      {parseFloat(selectedBillDetails.amountPaid) > 0 && (
+                        <div className="flex justify-between text-gray-600 font-semibold">
+                          <span>Down Payment (Cash):</span>
+                          <span>Rs. {parseFloat(selectedBillDetails.amountPaid).toLocaleString()}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-red-600 font-semibold">
+                        <span>Credit Amount:</span>
+                        <span>Rs. {parseFloat(selectedBillDetails.creditAmount).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between text-gray-600">
+                      <span>Amount Paid:</span>
+                      <span>Rs. {parseFloat(selectedBillDetails.amountPaid).toLocaleString()}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button variant="secondary" onClick={() => setShowViewModal(false)}>Close</Button>
+                <Button variant="primary" icon={Printer} onClick={handlePrint}>Print Invoice</Button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-6 text-slate-400">Failed to load bill details.</div>
+          )}
+        </Modal>
+      )}
     </div>
   );
 };

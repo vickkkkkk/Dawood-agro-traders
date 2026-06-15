@@ -27,8 +27,6 @@ const BillListing = () => {
   const [paymentMethod, setPaymentMethod] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [page, setPage] = useState(1);
-  const limit = 10;
 
   // Selected bill for view/print modal
   const [selectedBill, setSelectedBill] = useState(null);
@@ -52,10 +50,10 @@ const BillListing = () => {
 
   // Fetch Bills
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['bills', search, paymentMethod, startDate, endDate, page],
+    queryKey: ['bills', search, paymentMethod, startDate, endDate],
     queryFn: () => getBills({
-      page,
-      limit,
+      page: 1,
+      limit: 9999,
       search,
       paymentMethod,
       startDate,
@@ -65,8 +63,6 @@ const BillListing = () => {
   });
 
   const bills = Array.isArray(data?.data) ? data.data : (data?.data?.bills || data?.bills || []);
-  const totalBills = data?.pagination?.total || data?.data?.total || data?.total || 0;
-  const totalPages = Math.max(1, Math.ceil(totalBills / limit));
 
   // Void Bill Mutation
   const voidBillMutation = useMutation({
@@ -154,7 +150,8 @@ const BillListing = () => {
               id="bill-search"
               placeholder="Search by bill number..."
               value={search}
-              onChange={(val) => { setSearch(val); setPage(1); }}
+              onChange={(val) => setSearch(val)}
+              className="w-full sm:!w-full"
             />
           </div>
           <div>
@@ -162,16 +159,16 @@ const BillListing = () => {
               id="bill-payment-method"
               icon={CreditCard}
               options={paymentMethodOptions}
-              className="pos-filter-input pos-filter-select"
+              className="pos-filter-input"
               value={paymentMethod}
-              onChange={(e) => { setPaymentMethod(e.target.value); setPage(1); }}
+              onChange={(e) => setPaymentMethod(e.target.value)}
             />
           </div>
           <div>
             <DatePicker
               id="bill-start-date"
               value={startDate}
-              onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
+              onChange={(e) => setStartDate(e.target.value)}
               className="pos-filter-input"
             />
           </div>
@@ -179,7 +176,7 @@ const BillListing = () => {
             <DatePicker
               id="bill-end-date"
               value={endDate}
-              onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
+              onChange={(e) => setEndDate(e.target.value)}
               className="pos-filter-input"
             />
           </div>
@@ -193,7 +190,6 @@ const BillListing = () => {
                 setPaymentMethod('');
                 setStartDate('');
                 setEndDate('');
-                setPage(1);
               }}
             >
               Reset Filters
@@ -205,13 +201,12 @@ const BillListing = () => {
 
       {/* Bills Table */}
       <Card padding={false}>
+        <div style={{ maxHeight: 'calc(100vh - 220px)', overflowY: 'auto' }}>
         <Table
           id="bills-table"
           loading={isLoading || isFetching}
-          headers={['Bill No', 'Date', 'Customer', 'Payment Method', 'Discount', 'Total Bill', 'Status', 'Actions']}
-          onPageChange={setPage}
-          currentPage={page}
-          totalPages={totalPages}
+          headers={['Bill No', 'Date', 'Customer', 'Payment Method', 'Discount', 'Amount Paid', 'Status', 'Actions']}
+          showPagination={false}
         >
           {bills.length > 0 ? (
             bills.map((bill) => {
@@ -234,7 +229,7 @@ const BillListing = () => {
                     {formatCurrency(bill.discount)}
                   </td>
                   <td className="px-4 py-3 text-sm font-bold text-white">
-                    {formatCurrency(bill.total)}
+                    {formatCurrency(bill.amountPaid)}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-col gap-1 items-start">
@@ -294,6 +289,7 @@ const BillListing = () => {
             </tr>
           )}
         </Table>
+        </div>
       </Card>
 
       {/* Bill View Modal */}

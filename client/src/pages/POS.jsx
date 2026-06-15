@@ -5,7 +5,7 @@ import { toast } from 'react-hot-toast';
 import {
   Search, ShoppingCart, Trash2, Plus, Minus, UserPlus,
   CreditCard, Printer, ShoppingBag, Landmark, Phone,
-  User, MapPin, DollarSign
+  User, MapPin, DollarSign, ChevronDown
 } from 'lucide-react';
 import { getProducts, getCategories } from '../api/inventory';
 import { getCustomers, createCustomer } from '../api/customers';
@@ -41,9 +41,26 @@ const POS = () => {
   const [cart, setCart] = useState([]);
   const [discount, setDiscount] = useState(0);
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [cashTendered, setCashTendered] = useState('');
   const [creditAmountPaid, setCreditAmountPaid] = useState('');
+
+  // Handle click outside to close customer dropdown
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('#customer-search-container')) {
+        setShowCustomerDropdown(false);
+      }
+    };
+    if (showCustomerDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showCustomerDropdown]);
 
   // Modals
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
@@ -223,11 +240,7 @@ const POS = () => {
 
   const validateCashTendered = (val) => {
     let errs = { ...errors };
-    if (val && parseFloat(val) < total) {
-      errs.cashTendered = `Amount must be at least the total bill of Rs. ${total.toLocaleString()}`;
-    } else {
-      delete errs.cashTendered;
-    }
+    delete errs.cashTendered;
     setErrors(errs);
   };
 
@@ -268,16 +281,9 @@ const POS = () => {
       return;
     }
 
-    if (paymentMethod === 'CASH' && cashTendered && parseFloat(cashTendered) < total) {
-      setErrors(prev => ({
-        ...prev,
-        cashTendered: `Amount must be at least the total bill of Rs. ${total.toLocaleString()}`
-      }));
-      toast.error('Cash tendered is less than total bill');
-      return;
-    }
-
-    const cashPaidVal = paymentMethod === 'CREDIT' ? (parseFloat(creditAmountPaid) || 0) : total;
+    const cashPaidVal = paymentMethod === 'CREDIT'
+      ? (parseFloat(creditAmountPaid) || 0)
+      : (cashTendered ? Math.max(0, Math.min(total, parseFloat(cashTendered))) : total);
 
     if (paymentMethod === 'CREDIT' && cashPaidVal > total) {
       toast.error('Cash paid cannot exceed total bill amount');
@@ -309,6 +315,38 @@ const POS = () => {
     window.location.reload();
   };
 
+  const getAmountLabel = (method) => {
+    switch (method) {
+      case 'CASH': return 'Cash Tendered';
+      case 'JAZZCASH': return 'JazzCash Amount';
+      case 'EASYPAISA': return 'EasyPaisa Amount';
+      case 'BANK_TRANSFER': return 'Bank Transfer Amount';
+      default: return 'Amount Received';
+    }
+  };
+
+  const getAmountPlaceholder = (method) => {
+    switch (method) {
+      case 'CASH': return 'Enter amount customer gave...';
+      case 'JAZZCASH': return 'Enter JazzCash amount...';
+      case 'EASYPAISA': return 'Enter EasyPaisa amount...';
+      case 'BANK_TRANSFER': return 'Enter Bank Transfer amount...';
+      default: return 'Enter amount...';
+    }
+  };
+
+  const getAmountIcon = (method) => {
+    switch (method) {
+      case 'JAZZCASH':
+      case 'EASYPAISA':
+        return CreditCard;
+      case 'BANK_TRANSFER':
+        return Landmark;
+      default:
+        return DollarSign;
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-fade-in relative min-h-[calc(100vh-120px)]">
 
@@ -317,7 +355,7 @@ const POS = () => {
 
         {/* Product Catalog Card Wrapper */}
         <Card className="flex flex-col h-full bg-slate-900/40 backdrop-blur-xl border-white/5 overflow-hidden" compact={false}>
-          
+
           {/* Card Header with Title and Search/Filters below */}
           <div className="flex flex-col gap-4 pb-4 border-b border-white/10 mb-4 shrink-0">
             <div className="flex items-center gap-2">
@@ -423,25 +461,115 @@ const POS = () => {
               <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">(Optional)</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="flex-1">
-                <Select
-                  id="customer-select"
-                  placeholder="Walk-in Customer"
-                  icon={User}
-                  value={selectedCustomerId}
-                  onChange={(e) => setSelectedCustomerId(e.target.value)}
-                  options={customers.map((c) => ({
-                    value: c.id,
-                    label: `${c.name} (${c.phone}) - Udhar: ${formatCurrency(c.creditBalance)}`
-                  }))}
-                  className="w-full"
-                />
+              <div className="flex-1 relative" id="customer-search-container">
+                {/* Dropdown Toggle Button */}
+                <button
+                  id="customer-select-toggle"
+                  type="button"
+                  onClick={() => {
+                    setShowCustomerDropdown(!showCustomerDropdown);
+                    setCustomerSearch('');
+                  }}
+                  className="w-full flex items-center justify-between gap-2 px-4 py-3 bg-slate-950/40 border border-white/10 hover:border-white/20 text-sm text-left transition-all duration-200 focus:outline-none focus:border-emerald-500/50 cursor-pointer text-slate-300 h-[46px] !rounded-xl"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <User size={16} className="text-slate-400 shrink-0" />
+                    <span className="truncate">
+                      {selectedCustomerId
+                        ? (() => {
+                          const selectedCustomer = customers.find(c => String(c.id) === String(selectedCustomerId));
+                          return selectedCustomer
+                            ? `${selectedCustomer.name} (${selectedCustomer.phone}) - Udhar: ${formatCurrency(selectedCustomer.creditBalance)}`
+                            : 'Walk-in Customer';
+                        })()
+                        : 'Walk-in Customer'}
+                    </span>
+                  </div>
+                  <ChevronDown size={16} className="text-slate-400 shrink-0" />
+                </button>
+
+                {/* Dropdown Panel */}
+                {showCustomerDropdown && (
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-slate-950/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl z-50 p-2.5 flex flex-col gap-2.5 max-h-80 animate-fade-in">
+                    {/* Search Field inside dropdown */}
+                    <div className="shrink-0 px-0.5">
+                      <Input
+                        id="customer-dropdown-search"
+                        placeholder="Search by name or number..."
+                        icon={Search}
+                        value={customerSearch}
+                        onChange={(e) => setCustomerSearch(e.target.value)}
+                        className="w-full text-xs font-semibold"
+                        autoFocus
+                      />
+                    </div>
+
+                    {/* Customers List */}
+                    <div className="flex-1 overflow-y-auto space-y-0.5 max-h-56 pr-1">
+                      {/* Walk-in Customer Option */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedCustomerId('');
+                          setShowCustomerDropdown(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold transition-colors hover:bg-white/5 cursor-pointer ${!selectedCustomerId ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-300'
+                          }`}
+                      >
+                        Walk-in Customer
+                      </button>
+
+                      {/* Filtered Customers */}
+                      {(() => {
+                        const searchFiltered = customers.filter(c =>
+                          (c.name || '').toLowerCase().includes(customerSearch.toLowerCase()) ||
+                          (c.phone || '').includes(customerSearch)
+                        );
+
+                        if (searchFiltered.length === 0) {
+                          return (
+                            <p className="text-slate-500 text-center text-xs py-3 font-medium">
+                              No matching customers found
+                            </p>
+                          );
+                        }
+
+                        return searchFiltered.map((c) => {
+                          const isSelected = String(c.id) === String(selectedCustomerId);
+                          return (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedCustomerId(c.id);
+                                setShowCustomerDropdown(false);
+                              }}
+                              className={`w-full text-left px-3 py-2.5 rounded-lg text-xs transition-colors hover:bg-white/5 cursor-pointer flex flex-col gap-1 border-none bg-transparent ${isSelected ? 'bg-emerald-500/10 text-emerald-400 font-semibold' : 'text-slate-300'
+                                }`}
+                            >
+                              <div className="flex justify-between items-center w-full">
+                                <span className="font-bold">{c.name}</span>
+                                <span className="text-[10px] text-slate-500 font-semibold">{c.phone}</span>
+                              </div>
+                              <div className="flex justify-between items-center w-full text-[10px] text-slate-400 mt-0.5">
+                                <span>Udhar:</span>
+                                <span className={c.creditBalance > 0 ? 'text-amber-400 font-bold' : 'text-slate-400'}>
+                                  {formatCurrency(c.creditBalance)}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </div>
+                )}
               </div>
               <Button
                 variant="secondary"
                 size="md"
                 onClick={() => { setErrors({}); setShowCustomerModal(true); }}
-                className="!p-3.5 !rounded-md"
+                className="h-[46px] w-[46px] flex items-center justify-center shrink-0 !rounded-xl !p-0"
                 icon={UserPlus}
                 title="Add New Customer"
                 aria-label="Add New Customer"
@@ -643,7 +771,7 @@ const POS = () => {
                         error={errors.creditAmountPaid}
                         icon={DollarSign}
                       />
-                      
+
                       <div className="flex flex-col gap-2 pt-3 border-t border-white/5 text-xs font-semibold">
                         <div className="flex justify-between">
                           <span className="text-slate-400">Paid in Cash:</span>
@@ -660,23 +788,25 @@ const POS = () => {
               </div>
             )}
 
-            {paymentMethod === 'CASH' && (
+            {['CASH', 'JAZZCASH', 'EASYPAISA', 'BANK_TRANSFER'].includes(paymentMethod) && (
               <div className="space-y-4 p-4 bg-slate-950/40 border border-white/10 rounded-xl">
                 <Input
                   id="cash-tendered-input"
-                  label="Cash Tendered"
+                  label={getAmountLabel(paymentMethod)}
                   type="number"
-                  placeholder="Enter amount customer gave..."
+                  placeholder={getAmountPlaceholder(paymentMethod)}
                   value={cashTendered}
                   error={errors.cashTendered}
-                  icon={DollarSign}
+                  icon={getAmountIcon(paymentMethod)}
                   onChange={(e) => { setCashTendered(e.target.value); if (errors.cashTendered) validateCashTendered(e.target.value); }}
                   onBlur={(e) => validateCashTendered(e.target.value)}
                 />
-                <div className="flex justify-between items-center text-sm mt-4 pt-3 border-t border-white/5 font-semibold">
-                  <span className="text-slate-400">Change Due:</span>
-                  <span className="font-extrabold text-white text-base">{formatCurrency(changeDue)}</span>
-                </div>
+                {paymentMethod === 'CASH' && (
+                  <div className="flex justify-between items-center text-sm mt-4 pt-3 border-t border-white/5 font-semibold">
+                    <span className="text-slate-400">Change Due:</span>
+                    <span className="font-extrabold text-white text-base">{formatCurrency(changeDue)}</span>
+                  </div>
+                )}
               </div>
             )}
 
@@ -755,7 +885,7 @@ const POS = () => {
               value={customerAddress}
               onChange={(e) => setCustomerAddress(e.target.value)}
             />
-            
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Select
                 id="cust-balance-type"

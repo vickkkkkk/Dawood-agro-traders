@@ -20,8 +20,6 @@ const CreditLedger = () => {
   
   // Filters
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const limit = 10;
 
   // Selected customer for detailed ledger
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
@@ -259,13 +257,11 @@ const CreditLedger = () => {
 
       {/* Ledger Table */}
       <Card padding={false}>
+        <div style={{ maxHeight: 'calc(100vh - 220px)', overflowY: 'auto' }}>
         <Table
           id="credits-table"
           loading={summaryLoading}
           headers={['Customer Name', 'Phone Number', 'Last Transaction', 'Outstanding Balance (Udhar)', 'Actions']}
-          onPageChange={setPage}
-          currentPage={page}
-          totalPages={1}
           showPagination={false}
         >
           {filteredCustomers.length > 0 ? (
@@ -319,6 +315,7 @@ const CreditLedger = () => {
             </tr>
           )}
         </Table>
+        </div>
       </Card>
 
       {/* Detailed Customer Ledger Modal */}

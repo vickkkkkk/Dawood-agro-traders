@@ -21,8 +21,6 @@ const UserManagement = () => {
   
   // States
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const limit = 10;
 
   // Modals state
   const [showFormModal, setShowFormModal] = useState(false);
@@ -40,12 +38,10 @@ const UserManagement = () => {
 
   // Fetch Users
   const { data: usersData, isLoading, isFetching } = useQuery({
-    queryKey: ['users', search, page],
-    queryFn: () => getUsers({ page, limit, search }),
+    queryKey: ['users', search],
+    queryFn: () => getUsers({ page: 1, limit: 9999, search }),
   });
   const users = Array.isArray(usersData?.data) ? usersData.data : (usersData?.data?.users || usersData?.users || []);
-  const totalUsers = usersData?.pagination?.total || usersData?.data?.total || usersData?.total || users.length || 0;
-  const totalPages = Math.max(1, Math.ceil(totalUsers / limit));
 
   // Mutations
   const createUserMutation = useMutation({
@@ -222,7 +218,7 @@ const UserManagement = () => {
               id="users-search"
               placeholder="Search users by name or email..."
               value={search}
-              onChange={(val) => { setSearch(val); setPage(1); }}
+              onChange={(val) => setSearch(val)}
             />
           </div>
           <Button
@@ -239,13 +235,12 @@ const UserManagement = () => {
 
       {/* List Table */}
       <Card padding={false}>
+        <div style={{ maxHeight: 'calc(100vh - 220px)', overflowY: 'auto' }}>
         <Table
           id="users-table"
           loading={isLoading || isFetching}
           headers={['Staff Member', 'Email Address', 'System Access Role', 'Status', 'Date Joined', 'Actions']}
-          onPageChange={setPage}
-          currentPage={page}
-          totalPages={totalPages}
+          showPagination={false}
         >
           {users.length > 0 ? (
             users.map((u) => {
@@ -312,6 +307,7 @@ const UserManagement = () => {
             </tr>
           )}
         </Table>
+        </div>
       </Card>
 
       {/* Create / Edit Form Modal */}
