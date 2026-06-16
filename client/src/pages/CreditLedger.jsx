@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
-import { Search, Landmark, BookOpen, Plus, Eye, DollarSign, Calendar, AlertCircle, User, FileText } from 'lucide-react';
+import { Search, Landmark, BookOpen, Plus, Eye, DollarSign, Calendar, AlertCircle, User, FileText, CreditCard, Printer, RefreshCw } from 'lucide-react';
 import { getCreditSummary, getCustomerCredits, recordPayment, getOverdue } from '../api/credits';
 import { getCustomers } from '../api/customers';
+import { getBillById } from '../api/billing';
 import Card from '../components/ui/Card';
 import Table from '../components/ui/Table';
 import Badge from '../components/ui/Badge';
@@ -14,6 +15,7 @@ import Button from '../components/ui/Button';
 import SearchBar from '../components/ui/SearchBar';
 import { formatCurrency } from '../utils/formatCurrency';
 import { formatDate, formatDateTime } from '../utils/formatDate';
+import { PAYMENT_METHOD_LABELS } from '../utils/constants';
 
 const CreditLedger = () => {
   const queryClient = useQueryClient();
@@ -31,7 +33,14 @@ const CreditLedger = () => {
   const [recoveryCustomerId, setRecoveryCustomerId] = useState('');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [errors, setErrors] = useState({});
+
+  // Printing receipt state
+  const [selectedTxForPrint, setSelectedTxForPrint] = useState(null);
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [printBillDetails, setPrintBillDetails] = useState(null);
+  const [loadingPrintBill, setLoadingPrintBill] = useState(false);
 
   // Fetch credit customers list
   const { data: summaryData, isLoading: summaryLoading } = useQuery({
@@ -90,6 +99,32 @@ const CreditLedger = () => {
     setShowLedgerModal(true);
   };
 
+  const handleOpenReceipt = async (tx) => {
+    setSelectedTxForPrint(tx);
+    setShowPrintModal(true);
+    if (tx.type === 'CREDIT' && tx.billId) {
+      setLoadingPrintBill(true);
+      try {
+        const res = await getBillById(tx.billId);
+        setPrintBillDetails(res.data);
+      } catch (err) {
+        toast.error('Failed to load bill details');
+      } finally {
+        setLoadingPrintBill(false);
+      }
+    } else {
+      setPrintBillDetails(null);
+    }
+  };
+
+  const handlePrint = () => {
+    const printContent = document.getElementById('receipt-print-area').innerHTML;
+    const originalContent = document.body.innerHTML;
+    document.body.innerHTML = printContent;
+    window.print();
+    window.location.reload();
+  };
+
   const handleOpenRecordPayment = (cId = '') => {
     setRecoveryCustomerId(cId);
     setErrors({});
@@ -100,6 +135,7 @@ const CreditLedger = () => {
     setRecoveryCustomerId('');
     setAmount('');
     setDescription('');
+    setPaymentMethod('CASH');
     setErrors({});
   };
 
@@ -151,7 +187,8 @@ const CreditLedger = () => {
     recordPaymentMutation.mutate({
       customerId: parseInt(recoveryCustomerId),
       amount: parseFloat(amount),
-      description: description || 'Credit Recovery Payment'
+      description: description || 'Credit Recovery Payment',
+      paymentMethod
     });
   };
 
@@ -363,12 +400,13 @@ const CreditLedger = () => {
                       <th className="px-6 py-3.5 text-left">Type</th>
                       <th className="px-6 py-3.5 text-right">Debit (Added)</th>
                       <th className="px-6 py-3.5 text-right">Credit (Paid)</th>
+                      <th className="px-6 py-3.5 text-center no-print">Print</th>
                     </tr>
                   </thead>
                   <tbody>
                     {ledgerTransactions.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="px-6 py-12 text-center text-slate-500">No ledger transactions found</td>
+                        <td colSpan={6} className="px-6 py-12 text-center text-slate-500">No ledger transactions found</td>
                       </tr>
                     ) : (
                       ledgerTransactions.map((tx) => (
@@ -380,20 +418,40 @@ const CreditLedger = () => {
                             {tx.bill?.billNo ? (
                               <span className="font-mono text-emerald-400 font-semibold">Bill: {tx.bill.billNo}</span>
                             ) : (
-                              <span>{tx.description}</span>
+                              <div className="flex flex-col">
+                                <span>{tx.description}</span>
+                                {tx.type === 'PAYMENT' && (
+                                  <span className="text-[11px] text-slate-400 mt-0.5">
+                                    Method: {PAYMENT_METHOD_LABELS[tx.paymentMethod] || tx.paymentMethod || 'Cash'}
+                                  </span>
+                                )}
+                              </div>
                             )}
                           </td>
-                          <td className="px-6 py-3.5">
-                            <Badge variant={tx.type === 'CREDIT' ? 'danger' : 'success'}>
-                              {tx.type}
-                            </Badge>
-                          </td>
-                          <td className="px-6 py-3.5 text-right font-semibold text-red-400">
-                            {tx.type === 'CREDIT' ? formatCurrency(tx.amount) : '-'}
-                          </td>
-                          <td className="px-6 py-3.5 text-right font-semibold text-emerald-400">
-                            {tx.type === 'PAYMENT' ? formatCurrency(tx.amount) : '-'}
-                          </td>
+                           <td className="px-6 py-3.5">
+                             <Badge variant={tx.type === 'CREDIT' ? 'danger' : 'success'}>
+                               {tx.type === 'CREDIT' 
+                                 ? 'CREDIT' 
+                                 : (PAYMENT_METHOD_LABELS[tx.paymentMethod] || tx.paymentMethod || 'Cash')}
+                             </Badge>
+                           </td>
+                           <td className="px-6 py-3.5 text-right font-semibold text-red-400">
+                             {tx.type === 'CREDIT' ? formatCurrency(tx.amount) : ''}
+                           </td>
+                           <td className="px-6 py-3.5 text-right font-semibold text-emerald-400">
+                             {tx.type === 'PAYMENT' ? formatCurrency(tx.amount) : ''}
+                           </td>
+                           <td className="px-6 py-3.5 text-center no-print">
+                             <Button
+                               variant="secondary"
+                               size="xs"
+                               icon={Printer}
+                               onClick={() => handleOpenReceipt(tx)}
+                               className="px-2 py-1 h-auto"
+                             >
+                               Print
+                             </Button>
+                           </td>
                         </tr>
                       ))
                     )}
@@ -465,6 +523,21 @@ const CreditLedger = () => {
                 onBlur={(e) => validateField('amount', e.target.value)}
               />
 
+              <Select
+                id="recovery-payment-method"
+                label="Payment Type *"
+                required
+                icon={CreditCard}
+                options={[
+                  { value: 'CASH', label: 'Cash' },
+                  { value: 'JAZZCASH', label: 'JazzCash' },
+                  { value: 'EASYPAISA', label: 'EasyPaisa' },
+                  { value: 'BANK_TRANSFER', label: 'Bank Transfer' },
+                ]}
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+              />
+
               <Input
                 id="recovery-desc"
                 label="Payment Reference / Description"
@@ -474,6 +547,159 @@ const CreditLedger = () => {
                 onChange={(e) => setDescription(e.target.value)}
               />
           </form>
+        </Modal>
+      )}
+      {/* Receipt Print Modal */}
+      {showPrintModal && selectedTxForPrint && (
+        <Modal
+          id="print-receipt-modal"
+          title={selectedTxForPrint.type === 'CREDIT' ? 'Print Bill Invoice' : 'Print Recovery Receipt'}
+          onClose={() => { setShowPrintModal(false); setSelectedTxForPrint(null); setPrintBillDetails(null); }}
+        >
+          {loadingPrintBill ? (
+            <div className="flex justify-center items-center py-12">
+              <RefreshCw className="w-8 h-8 text-emerald-500 animate-spin" />
+              <span className="ml-2 text-sm text-slate-400">Loading bill details...</span>
+            </div>
+          ) : selectedTxForPrint.type === 'CREDIT' && printBillDetails ? (
+            <div className="space-y-6">
+              <div
+                id="receipt-print-area"
+                className="bg-white text-black p-6 rounded-xl font-sans text-xs max-w-sm mx-auto shadow-inner"
+              >
+                <div className="text-center space-y-1 mb-4 border-b border-dashed border-gray-400 pb-3">
+                  <h2 className="text-sm font-bold tracking-wide">DAWOOD AGRO TRADERS</h2>
+                  <p className="text-[10px] text-gray-600">Jatoi Road Near Zrai Bank Shah Jamal</p>
+                  <p className="text-[10px] text-gray-600">Phone: 0340-0736201, 0302-7338805</p>
+                  <p className="text-[10px] font-mono mt-2 text-gray-700">INVOICE: {printBillDetails.billNo}</p>
+                  <p className="text-[9px] text-gray-500">Date: {new Date(printBillDetails.billDate).toLocaleString('en-PK')}</p>
+                </div>
+
+                {printBillDetails.isVoid && (
+                  <div className="border border-red-500 text-red-500 text-center font-bold text-sm p-1 rounded mb-4 tracking-widest rotate-2">
+                    VOIDED / CANCELLED
+                  </div>
+                )}
+
+                <div className="space-y-1 mb-4 text-gray-900">
+                  <p><span className="font-semibold text-gray-700">Created By:</span> {printBillDetails.user?.name || 'Counter Staff'}</p>
+                  <p><span className="font-semibold text-gray-700">Customer:</span> {printBillDetails.customer?.name || 'Walk-in'}</p>
+                  {printBillDetails.customer?.phone && <p><span className="font-semibold text-gray-700">Phone:</span> {printBillDetails.customer.phone}</p>}
+                  <p><span className="font-semibold text-gray-700">Payment:</span> {PAYMENT_METHOD_LABELS[printBillDetails.paymentMethod]}</p>
+                </div>
+
+                <table className="w-full border-t border-b border-dashed border-gray-400 py-2 my-2 text-gray-900">
+                  <thead>
+                    <tr className="border-b border-gray-300 font-semibold text-gray-700">
+                      <th className="text-left py-1">Item</th>
+                      <th className="text-center py-1">Qty</th>
+                      <th className="text-right py-1">Price</th>
+                      <th className="text-right py-1">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {printBillDetails.items?.map((item, idx) => {
+                      return (
+                        <tr key={idx} className="py-1">
+                          <td className="py-1 text-left">
+                            <div>{item.product?.name || `Product #${item.productId}`}</div>
+                          </td>
+                          <td className="text-center py-1">{parseFloat(item.quantity)}</td>
+                          <td className="text-right py-1">{parseFloat(item.unitPrice).toFixed(0)}</td>
+                          <td className="text-right py-1">{parseFloat(item.total).toFixed(0)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+
+                <div className="space-y-1.5 text-right font-medium mt-4 text-gray-900">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Subtotal:</span>
+                    <span>Rs. {parseFloat(printBillDetails.subtotal).toLocaleString()}</span>
+                  </div>
+                  {parseFloat(printBillDetails.discount) > 0 && (
+                    <div className="flex justify-between text-red-600">
+                      <span>Discount:</span>
+                      <span>-Rs. {parseFloat(printBillDetails.discount).toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-sm font-bold text-black border-t border-gray-300 pt-1">
+                    <span>Grand Total:</span>
+                    <span>Rs. {parseFloat(printBillDetails.total).toLocaleString()}</span>
+                  </div>
+
+                  {printBillDetails.paymentMethod === 'CREDIT' ? (
+                    <div className="space-y-1 border-t border-dashed border-gray-300 pt-1 text-[10px]">
+                      {parseFloat(printBillDetails.amountPaid) > 0 && (
+                        <div className="flex justify-between text-gray-600 font-semibold">
+                          <span>Down Payment (Cash):</span>
+                          <span>Rs. {parseFloat(printBillDetails.amountPaid).toLocaleString()}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-red-600 font-semibold">
+                        <span>Credit Amount:</span>
+                        <span>Rs. {parseFloat(printBillDetails.creditAmount).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between text-gray-600">
+                      <span>Amount Paid:</span>
+                      <span>Rs. {parseFloat(printBillDetails.amountPaid).toLocaleString()}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button variant="secondary" onClick={() => { setShowPrintModal(false); setSelectedTxForPrint(null); setPrintBillDetails(null); }}>Close</Button>
+                <Button variant="primary" icon={Printer} onClick={handlePrint}>Print Invoice</Button>
+              </div>
+            </div>
+          ) : selectedTxForPrint.type === 'PAYMENT' ? (
+            <div className="space-y-6">
+              <div
+                id="receipt-print-area"
+                className="bg-white text-black p-6 rounded-xl font-sans text-xs max-w-sm mx-auto shadow-inner"
+              >
+                <div className="text-center space-y-1 mb-4 border-b border-dashed border-gray-400 pb-3">
+                  <h2 className="text-sm font-bold tracking-wide">DAWOOD AGRO TRADERS</h2>
+                  <p className="text-[10px] text-gray-600">Jatoi Road Near Zrai Bank Shah Jamal</p>
+                  <p className="text-[10px] text-gray-600">Phone: 0340-0736201, 0302-7338805</p>
+                  <p className="text-[10px] font-mono mt-2 text-gray-700">RECEIPT NO: REC-{selectedTxForPrint.id}</p>
+                  <p className="text-[9px] text-gray-500">Date: {new Date(selectedTxForPrint.transactionDate).toLocaleString('en-PK')}</p>
+                </div>
+
+                <div className="space-y-1 mb-4 border-b border-dashed border-gray-400 pb-3 text-gray-900 text-left">
+                  <p><span className="font-semibold text-gray-700">Customer Name:</span> {selectedCustomerName || 'N/A'}</p>
+                  <p><span className="font-semibold text-gray-700">Payment Method:</span> {PAYMENT_METHOD_LABELS[selectedTxForPrint.paymentMethod] || selectedTxForPrint.paymentMethod || 'Cash'}</p>
+                  <p><span className="font-semibold text-gray-700">Description:</span> {selectedTxForPrint.description || 'Credit Recovery Payment'}</p>
+                </div>
+
+                <div className="space-y-2.5 font-medium mt-4 text-gray-900">
+                  <div className="flex justify-between text-sm font-bold text-black border-b border-gray-300 pb-1">
+                    <span>Amount Recovered:</span>
+                    <span>Rs. {parseFloat(selectedTxForPrint.amount).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-600 pt-1">
+                    <span>{parseFloat(selectedCustomerDetails.creditBalance || 0) < 0 ? 'Remaining Advance:' : 'Remaining Udhar Balance:'}</span>
+                    <span className="font-bold">Rs. {Math.abs(parseFloat(selectedCustomerDetails.creditBalance || 0)).toLocaleString()}</span>
+                  </div>
+                </div>
+
+                <div className="text-center space-y-1 mt-6 pt-3 border-t border-dashed border-gray-400">
+                  <p className="text-[10px] font-semibold text-gray-700">Thank you for your payment!</p>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button variant="secondary" onClick={() => { setShowPrintModal(false); setSelectedTxForPrint(null); }}>Close</Button>
+                <Button variant="primary" icon={Printer} onClick={handlePrint}>Print Receipt</Button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-6 text-slate-400">Failed to load receipt details.</div>
+          )}
         </Modal>
       )}
 

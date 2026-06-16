@@ -115,5 +115,5 @@ app.listen(PORT, () => {
 });
 
 export default app;
-// Force nodemon restart to pick up updated Prisma client dll
+// Force nodemon restart to pick up updated Prisma client dll (Updated)
 

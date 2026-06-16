@@ -68,25 +68,110 @@ export const getDashboard = async (req, res, next) => {
     const totalSales = cashPayments + onlinePayments + creditPayments;
     const billCount = periodBills.length;
 
-    // Total stock value
-    const products = await prisma.product.findMany({
-      where: { isActive: true },
-      select: { stockQty: true, purchasePrice: true, salePrice: true },
-    });
-    const totalStockValue = products.reduce(
-      (sum, p) => sum + Number(p.stockQty) * Number(p.purchasePrice),
-      0
-    );
+    // Total stock value & outstanding credits
+    let totalStockValue = 0;
+    let totalCredits = 0;
 
-    // Total credits outstanding
-    const creditCustomers = await prisma.customer.findMany({
-      where: { creditBalance: { gt: 0 } },
-      select: { creditBalance: true },
-    });
-    const totalCredits = creditCustomers.reduce(
-      (sum, c) => sum + Number(c.creditBalance),
-      0
-    );
+    if (periodStart <= today) {
+      const evaluationEnd = periodEnd > today ? today : periodEnd;
+
+      // Total stock value
+      const products = await prisma.product.findMany({
+        where: { isActive: true },
+        select: { id: true, stockQty: true, purchasePrice: true, createdAt: true },
+      });
+
+      const billItemsAfter = await prisma.billItem.findMany({
+        where: {
+          bill: {
+            billDate: { gt: evaluationEnd },
+            isVoid: false,
+          },
+          product: { isActive: true },
+        },
+        select: {
+          productId: true,
+          quantity: true,
+          returnedQuantity: true,
+        },
+      });
+
+      const purchaseItemsAfter = await prisma.purchaseItem.findMany({
+        where: {
+          purchase: {
+            purchaseDate: { gt: evaluationEnd },
+            status: 'RECEIVED',
+          },
+          product: { isActive: true },
+        },
+        select: {
+          productId: true,
+          quantity: true,
+        },
+      });
+
+      const stockChanges = {};
+      for (const item of billItemsAfter) {
+        if (!stockChanges[item.productId]) {
+          stockChanges[item.productId] = 0;
+        }
+        stockChanges[item.productId] += (Number(item.quantity) - Number(item.returnedQuantity));
+      }
+
+      for (const item of purchaseItemsAfter) {
+        if (!stockChanges[item.productId]) {
+          stockChanges[item.productId] = 0;
+        }
+        stockChanges[item.productId] -= Number(item.quantity);
+      }
+
+      totalStockValue = products.reduce((sum, p) => {
+        if (p.createdAt > evaluationEnd) {
+          return sum;
+        }
+        const change = stockChanges[p.id] || 0;
+        const historicalQty = Math.max(0, Number(p.stockQty) + change);
+        return sum + historicalQty * Number(p.purchasePrice);
+      }, 0);
+
+      // Total credits outstanding
+      const customers = await prisma.customer.findMany({
+        select: { id: true, creditBalance: true }
+      });
+
+      const creditTransactionsAfter = await prisma.creditTransaction.findMany({
+        where: {
+          transactionDate: { gt: evaluationEnd }
+        },
+        select: {
+          customerId: true,
+          type: true,
+          amount: true
+        }
+      });
+
+      const creditChangesAfter = {};
+      for (const tx of creditTransactionsAfter) {
+        if (!creditChangesAfter[tx.customerId]) {
+          creditChangesAfter[tx.customerId] = 0;
+        }
+        if (tx.type === 'CREDIT') {
+          creditChangesAfter[tx.customerId] += Number(tx.amount);
+        } else if (tx.type === 'PAYMENT') {
+          creditChangesAfter[tx.customerId] -= Number(tx.amount);
+        }
+      }
+
+      totalCredits = customers.reduce((sum, c) => {
+        const currentBal = Number(c.creditBalance);
+        const changeAfter = creditChangesAfter[c.id] || 0;
+        const historicalBal = currentBal - changeAfter;
+        if (historicalBal > 0) {
+          return sum + historicalBal;
+        }
+        return sum;
+      }, 0);
+    }
 
     // Low stock count
     const allProducts = await prisma.product.findMany({
@@ -168,12 +253,13 @@ export const getDailySales = async (req, res, next) => {
       let billOnline = 0;
       let billCredit = 0;
 
-      if (bill.paymentMethod === 'CASH') {
+      const method = bill.paymentMethod?.toUpperCase();
+      if (method === 'CASH') {
         billCash = Number(bill.amountPaid);
-      } else if (bill.paymentMethod === 'CREDIT') {
+      } else if (method === 'CREDIT') {
         billCash = Number(bill.amountPaid);
         billCredit = Number(bill.creditAmount);
-      } else if (['JAZZCASH', 'EASYPAISA', 'BANK_TRANSFER'].includes(bill.paymentMethod)) {
+      } else if (['JAZZCASH', 'EASYPAISA', 'BANK_TRANSFER'].includes(method)) {
         billOnline = Number(bill.amountPaid);
       }
 
@@ -240,12 +326,13 @@ export const getMonthlySales = async (req, res, next) => {
       let billOnline = 0;
       let billCredit = 0;
 
-      if (bill.paymentMethod === 'CASH') {
+      const method = bill.paymentMethod?.toUpperCase();
+      if (method === 'CASH') {
         billCash = Number(bill.amountPaid);
-      } else if (bill.paymentMethod === 'CREDIT') {
+      } else if (method === 'CREDIT') {
         billCash = Number(bill.amountPaid);
         billCredit = Number(bill.creditAmount);
-      } else if (['JAZZCASH', 'EASYPAISA', 'BANK_TRANSFER'].includes(bill.paymentMethod)) {
+      } else if (['JAZZCASH', 'EASYPAISA', 'BANK_TRANSFER'].includes(method)) {
         billOnline = Number(bill.amountPaid);
       }
 

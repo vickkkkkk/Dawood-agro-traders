@@ -86,7 +86,7 @@ export const getCustomerCredits = async (req, res, next) => {
 // POST /api/credits/payment
 export const recordPayment = async (req, res, next) => {
   try {
-    const { customerId, amount, description } = req.body;
+    const { customerId, amount, description, paymentMethod } = req.body;
 
     if (!customerId || !amount || Number(amount) <= 0) {
       return res.status(400).json({
@@ -121,6 +121,7 @@ export const recordPayment = async (req, res, next) => {
           type: 'PAYMENT',
           amount: paymentAmount,
           description: description || 'Credit payment received',
+          paymentMethod: paymentMethod || 'CASH',
           transactionDate: new Date(),
         },
       });

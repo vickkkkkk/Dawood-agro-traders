@@ -163,6 +163,7 @@ model CreditTransaction {
   type            String     // CREDIT, PAYMENT
   amount          Float
   description     String?
+  paymentMethod   String?
   transactionDate DateTime   @default(now())
   createdAt       DateTime   @default(now())
 

@@ -219,7 +219,9 @@ const Customers = () => {
                 </td>
                 <td className="px-4 py-3">
                   <span className={`text-sm font-bold ${parseFloat(c.creditBalance) > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-                    {formatCurrency(c.creditBalance)}
+                    {parseFloat(c.creditBalance) < 0
+                      ? `Advance: ${formatCurrency(Math.abs(c.creditBalance))}`
+                      : formatCurrency(c.creditBalance)}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-sm text-slate-500">
@@ -367,7 +369,9 @@ const Customers = () => {
                 <div className="space-y-1">
                   <p className="text-slate-500 flex items-center gap-1"><Landmark size={14} /> Udhar Balance</p>
                   <p className={`font-bold ${parseFloat(customerDetail.creditBalance) > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-                    {formatCurrency(customerDetail.creditBalance)}
+                    {parseFloat(customerDetail.creditBalance) < 0
+                      ? `Advance: ${formatCurrency(Math.abs(customerDetail.creditBalance))}`
+                      : formatCurrency(customerDetail.creditBalance)}
                   </p>
                 </div>
                 {customerDetail.address && (

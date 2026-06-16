@@ -205,7 +205,7 @@ const BillListing = () => {
         <Table
           id="bills-table"
           loading={isLoading || isFetching}
-          headers={['Bill No', 'Date', 'Customer', 'Payment Method', 'Discount', 'Amount Paid', 'Status', 'Actions']}
+          headers={['Bill No', 'Date', 'Customer', 'Payment Method', 'Discount', 'Total Bill', 'Amount Paid', 'Credit Amount', 'Status', 'Actions']}
           showPagination={false}
         >
           {bills.length > 0 ? (
@@ -229,12 +229,28 @@ const BillListing = () => {
                     {formatCurrency(bill.discount)}
                   </td>
                   <td className="px-4 py-3 text-sm font-bold text-white">
+                    {formatCurrency(bill.total)}
+                  </td>
+                  <td className="px-4 py-3 text-sm font-medium text-slate-300">
                     {formatCurrency(bill.amountPaid)}
+                  </td>
+                  <td className="px-4 py-3 text-sm font-medium text-amber-400">
+                    {formatCurrency(bill.creditAmount || 0)}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-col gap-1 items-start">
-                      <Badge variant={bill.isVoid ? 'danger' : bill.paymentStatus === 'CREDIT' ? 'warning' : 'success'}>
-                        {bill.isVoid ? 'VOIDED' : bill.paymentStatus}
+                      <Badge
+                        variant={
+                          bill.isVoid ? 'danger' :
+                            bill.paymentStatus === 'CREDIT'
+                              ? (parseFloat(bill.amountPaid || 0) > 0 ? 'warning' : 'danger')
+                              : 'success'
+                        }
+                      >
+                        {bill.isVoid ? 'VOIDED' :
+                          bill.paymentStatus === 'CREDIT'
+                            ? (parseFloat(bill.amountPaid || 0) > 0 ? 'PARTIAL' : 'CREDIT')
+                            : 'PAID'}
                       </Badge>
                       {bill.hasReturns && !bill.isVoid && (
                         <Badge variant="info" size="sm">
@@ -283,7 +299,7 @@ const BillListing = () => {
             })
           ) : (
             <tr>
-              <td colSpan={8} className="px-7 py-16 text-center text-slate-500">
+              <td colSpan={10} className="px-7 py-16 text-center text-slate-500">
                 No bills found
               </td>
             </tr>

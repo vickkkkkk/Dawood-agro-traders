@@ -177,7 +177,7 @@ const Dashboard = () => {
           iconBg="bg-gradient-to-br from-blue-400 to-blue-600 shadow-lg shadow-blue-500/20"
         />
         <StatCard
-          title="Outstanding Credits"
+          title="Receivables"
           value={formatCurrency(stats.totalCredits || 0)}
           icon={CreditCard}
           gradient="bg-gradient-to-br from-amber-600/20 to-amber-800/20 border-amber-500/20"
@@ -185,14 +185,14 @@ const Dashboard = () => {
           change={stats.creditsChange}
         />
         <StatCard
-          title="Cash Payments"
+          title="Cash Sales"
           value={formatCurrency(stats.cashPayments || 0)}
           icon={Banknote}
           gradient="bg-gradient-to-br from-green-600/20 to-green-800/20 border-green-500/20"
           iconBg="bg-gradient-to-br from-green-400 to-green-600 shadow-lg shadow-green-500/20"
         />
         <StatCard
-          title="Online Payments"
+          title="Online Sales"
           value={formatCurrency(stats.onlinePayments || 0)}
           icon={Smartphone}
           gradient="bg-gradient-to-br from-purple-600/20 to-purple-800/20 border-purple-500/20"
@@ -269,18 +269,22 @@ const Dashboard = () => {
                       {bill.customer?.name || bill.customerName || 'Walk-in'}
                     </td>
                     <td className="text-white font-medium">
-                      {formatCurrency(bill.amountPaid !== undefined ? bill.amountPaid : (bill.total || bill.totalAmount || 0))}
+                      {formatCurrency(bill.total || 0)}
                     </td>
                     <td>
                       <Badge
                         variant={
-                          bill.status === 'PAID' ? 'success' :
-                            bill.status === 'PARTIAL' ? 'warning' :
-                              bill.status === 'CREDIT' ? 'danger' : 'default'
+                          bill.isVoid ? 'danger' :
+                            bill.paymentStatus === 'CREDIT'
+                              ? (parseFloat(bill.amountPaid || 0) > 0 ? 'warning' : 'danger')
+                              : 'success'
                         }
                         size="sm"
                       >
-                        {bill.status || 'Paid'}
+                        {bill.isVoid ? 'VOIDED' :
+                          bill.paymentStatus === 'CREDIT'
+                            ? (parseFloat(bill.amountPaid || 0) > 0 ? 'PARTIAL' : 'CREDIT')
+                            : 'PAID'}
                       </Badge>
                     </td>
                   </tr>
