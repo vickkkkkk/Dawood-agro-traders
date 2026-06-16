@@ -46,7 +46,24 @@ export const getDashboard = async (req, res, next) => {
         billDate: { gte: periodStart, lte: periodEnd },
         isVoid: false,
       },
-      select: { total: true, paymentMethod: true, amountPaid: true, creditAmount: true },
+      select: {
+        total: true,
+        paymentMethod: true,
+        amountPaid: true,
+        creditAmount: true,
+        items: {
+          select: {
+            quantity: true,
+            returnedQuantity: true,
+            purchasePrice: true,
+            product: {
+              select: {
+                purchasePrice: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     const cashPayments = periodBills
@@ -67,6 +84,15 @@ export const getDashboard = async (req, res, next) => {
 
     const totalSales = cashPayments + onlinePayments + creditPayments;
     const billCount = periodBills.length;
+
+    let totalCreditConsume = 0;
+    for (const b of periodBills) {
+      for (const item of b.items) {
+        const netQty = Number(item.quantity) - Number(item.returnedQuantity || 0);
+        const itemPurchasePrice = Number(item.purchasePrice !== undefined && item.purchasePrice !== 0 ? item.purchasePrice : (item.product?.purchasePrice || 0));
+        totalCreditConsume += itemPurchasePrice * netQty;
+      }
+    }
 
     // Total stock value & outstanding credits
     let totalStockValue = 0;
@@ -195,6 +221,7 @@ export const getDashboard = async (req, res, next) => {
         totalStockValue,
         totalCredits,
         lowStockCount,
+        totalCreditConsume,
         period: {
           start: periodStart,
           end: periodEnd,
@@ -384,7 +411,9 @@ export const getProfitReport = async (req, res, next) => {
 
     for (const item of billItems) {
       totalRevenue += Number(item.total);
-      totalCost += Number(item.product.purchasePrice) * Number(item.quantity);
+      const netQty = Number(item.quantity) - Number(item.returnedQuantity || 0);
+      const itemPurchasePrice = Number(item.purchasePrice !== undefined && item.purchasePrice !== 0 ? item.purchasePrice : (item.product?.purchasePrice || 0));
+      totalCost += itemPurchasePrice * netQty;
     }
 
     // Total discounts

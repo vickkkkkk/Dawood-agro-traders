@@ -170,6 +170,13 @@ const Dashboard = () => {
           change={stats.salesChange}
         />
         <StatCard
+          title="Total Credit Consume"
+          value={formatCurrency(stats.totalCreditConsume || 0)}
+          icon={ArrowDownRight}
+          gradient="bg-gradient-to-br from-rose-600/20 to-rose-800/20 border-rose-500/20"
+          iconBg="bg-gradient-to-br from-rose-400 to-rose-600 shadow-lg shadow-rose-500/20"
+        />
+        <StatCard
           title="Total Stock Value"
           value={formatCurrency(stats.totalStockValue || 0)}
           icon={Package}

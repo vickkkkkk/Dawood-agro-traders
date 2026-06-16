@@ -84,6 +84,7 @@ export const createBill = async (req, res, next) => {
           quantity: item.quantity,
           unitPrice: unitPrice,
           total: itemTotal,
+          purchasePrice: Number(product.purchasePrice),
         });
 
         // Deduct stock

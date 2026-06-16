@@ -117,6 +117,7 @@ model BillItem {
   returnedQuantity Float @default(0)
   unitPrice Float
   total     Float
+  purchasePrice Float   @default(0)
 
   bill    Bill    @relation(fields: [billId], references: [id])
   product Product @relation(fields: [productId], references: [id])
