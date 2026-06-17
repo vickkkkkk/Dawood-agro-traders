@@ -51,7 +51,7 @@ export const createCustomer = async (req, res, next) => {
       const created = await tx.customer.create({
         data: {
           name,
-          phone,
+          phone: phone || null,
           address: address || null,
           creditBalance: balance,
         },
@@ -95,7 +95,7 @@ export const updateCustomer = async (req, res, next) => {
 
     const updateData = {};
     if (name !== undefined) updateData.name = name;
-    if (phone !== undefined) updateData.phone = phone;
+    if (phone !== undefined) updateData.phone = phone || null;
     if (address !== undefined) updateData.address = address;
 
     const customer = await prisma.$transaction(async (tx) => {

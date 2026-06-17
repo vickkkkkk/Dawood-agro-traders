@@ -24,7 +24,7 @@ router.post(
   authorize('ADMIN', 'MANAGER', 'CASHIER'),
   validate([
     body('name').trim().notEmpty().withMessage('Customer name is required.'),
-    body('phone').trim().notEmpty().withMessage('Phone number is required.'),
+    body('phone').optional({ checkFalsy: true }).trim(),
     body('address').optional().trim(),
   ]),
   createCustomer
@@ -39,7 +39,7 @@ router.put(
   authorize('ADMIN', 'MANAGER'),
   validate([
     body('name').optional().trim().notEmpty().withMessage('Customer name cannot be empty.'),
-    body('phone').optional().trim().notEmpty().withMessage('Phone number cannot be empty.'),
+    body('phone').optional({ checkFalsy: true }).trim(),
     body('address').optional().trim(),
   ]),
   updateCustomer

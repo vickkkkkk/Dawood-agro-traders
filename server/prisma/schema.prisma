@@ -72,7 +72,7 @@ model Supplier {
 model Customer {
   id            Int      @id @default(autoincrement())
   name          String
-  phone         String   @unique
+  phone         String?  @unique
   address       String?
   creditBalance Float    @default(0)
   createdAt     DateTime @default(now())

@@ -1,7 +1,7 @@
 import api from './axios';
 
-export const getCreditSummary = async () => {
-  const response = await api.get('/credits/summary');
+export const getCreditSummary = async (params = {}) => {
+  const response = await api.get('/credits/summary', { params });
   return response.data;
 };
 
@@ -12,6 +12,11 @@ export const getCustomerCredits = async (customerId) => {
 
 export const recordPayment = async (data) => {
   const response = await api.post('/credits/payment', data);
+  return response.data;
+};
+
+export const recordPayback = async (data) => {
+  const response = await api.post('/credits/payback', data);
   return response.data;
 };
 

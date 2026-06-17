@@ -170,7 +170,7 @@ const Dashboard = () => {
           change={stats.salesChange}
         />
         <StatCard
-          title="Total Credit Consume"
+          title="Total Stock Consume"
           value={formatCurrency(stats.totalCreditConsume || 0)}
           icon={ArrowDownRight}
           gradient="bg-gradient-to-br from-rose-600/20 to-rose-800/20 border-rose-500/20"
@@ -211,6 +211,13 @@ const Dashboard = () => {
           icon={BarChart3}
           gradient="bg-gradient-to-br from-teal-600/20 to-teal-800/20 border-teal-500/20"
           iconBg="bg-gradient-to-br from-teal-400 to-teal-600 shadow-lg shadow-teal-500/20"
+        />
+        <StatCard
+          title="Advance Payment"
+          value={formatCurrency(stats.totalAdvance || 0)}
+          icon={Banknote}
+          gradient="bg-gradient-to-br from-indigo-600/20 to-indigo-800/20 border-indigo-500/20"
+          iconBg="bg-gradient-to-br from-indigo-400 to-indigo-600 shadow-lg shadow-indigo-500/20"
         />
       </div>
 

@@ -4,6 +4,7 @@ import {
   getCreditSummary,
   getCustomerCredits,
   recordPayment,
+  recordPayback,
   getOverdue,
 } from '../controllers/creditController.js';
 import verifyToken from '../middleware/auth.js';
@@ -33,6 +34,18 @@ router.post(
     body('description').optional().trim(),
   ]),
   recordPayment
+);
+
+// POST /api/credits/payback
+router.post(
+  '/payback',
+  authorize('ADMIN', 'MANAGER', 'CASHIER'),
+  validate([
+    body('customerId').isInt({ min: 1 }).withMessage('Valid customer ID is required.'),
+    body('amount').isFloat({ min: 0.01 }).withMessage('Amount must be greater than 0.'),
+    body('description').optional().trim(),
+  ]),
+  recordPayback
 );
 
 export default router;

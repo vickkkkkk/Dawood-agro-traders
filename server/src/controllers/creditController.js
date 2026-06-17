@@ -5,27 +5,102 @@ const prisma = new PrismaClient();
 // GET /api/credits/summary
 export const getCreditSummary = async (req, res, next) => {
   try {
-    const customers = await prisma.customer.findMany({
-      where: { creditBalance: { not: 0 } },
-      orderBy: { creditBalance: 'desc' },
-      select: {
-        id: true,
-        name: true,
-        phone: true,
-        creditBalance: true,
-        updatedAt: true,
-      },
-    });
+    const { month, year } = req.query;
 
-    const totalOutstanding = customers
-      .filter((c) => c.creditBalance > 0)
-      .reduce((sum, c) => sum + Number(c.creditBalance), 0);
+    let customers = [];
+    let totalOutstanding = 0;
+    let totalAdvance = 0;
+
+    if (month || year) {
+      const today = new Date();
+      const targetYear = Number(year) || today.getFullYear();
+      const targetMonth = Number(month) || today.getMonth() + 1;
+      const evaluationEnd = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
+
+      const allCustomers = await prisma.customer.findMany({
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          creditBalance: true,
+          updatedAt: true,
+        },
+      });
+
+      const creditTransactionsAfter = await prisma.creditTransaction.findMany({
+        where: {
+          transactionDate: { gt: evaluationEnd }
+        },
+        select: {
+          customerId: true,
+          type: true,
+          amount: true
+        }
+      });
+
+      const creditChangesAfter = {};
+      for (const tx of creditTransactionsAfter) {
+        if (!creditChangesAfter[tx.customerId]) {
+          creditChangesAfter[tx.customerId] = 0;
+        }
+        if (tx.type === 'CREDIT' || tx.type === 'PAYBACK') {
+          creditChangesAfter[tx.customerId] += Number(tx.amount);
+        } else if (tx.type === 'PAYMENT') {
+          creditChangesAfter[tx.customerId] -= Number(tx.amount);
+        }
+      }
+
+      customers = allCustomers
+        .map((c) => {
+          const currentBal = Number(c.creditBalance);
+          const changeAfter = creditChangesAfter[c.id] || 0;
+          const historicalBal = currentBal - changeAfter;
+          return {
+            ...c,
+            creditBalance: historicalBal,
+          };
+        })
+        .filter((c) => c.creditBalance !== 0);
+
+      // Sort by absolute balance descending
+      customers.sort((a, b) => Math.abs(b.creditBalance) - Math.abs(a.creditBalance));
+
+      totalOutstanding = customers
+        .filter((c) => c.creditBalance > 0)
+        .reduce((sum, c) => sum + Number(c.creditBalance), 0);
+
+      totalAdvance = customers
+        .filter((c) => c.creditBalance < 0)
+        .reduce((sum, c) => sum + Math.abs(Number(c.creditBalance)), 0);
+    } else {
+      const rawCustomers = await prisma.customer.findMany({
+        where: { creditBalance: { not: 0 } },
+        orderBy: { creditBalance: 'desc' },
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          creditBalance: true,
+          updatedAt: true,
+        },
+      });
+
+      customers = rawCustomers;
+      totalOutstanding = customers
+        .filter((c) => c.creditBalance > 0)
+        .reduce((sum, c) => sum + Number(c.creditBalance), 0);
+
+      totalAdvance = customers
+        .filter((c) => c.creditBalance < 0)
+        .reduce((sum, c) => sum + Math.abs(Number(c.creditBalance)), 0);
+    }
 
     res.json({
       success: true,
       data: {
         customers,
         totalOutstanding,
+        totalAdvance,
         customerCount: customers.length,
       },
     });
@@ -138,6 +213,79 @@ export const recordPayment = async (req, res, next) => {
     next(error);
   }
 };
+
+// POST /api/credits/payback
+export const recordPayback = async (req, res, next) => {
+  try {
+    const { customerId, amount, description, paymentMethod } = req.body;
+
+    if (!customerId || !amount || Number(amount) <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Customer ID and a positive amount are required.',
+      });
+    }
+
+    const customer = await prisma.customer.findUnique({
+      where: { id: Number(customerId) },
+    });
+
+    if (!customer) {
+      return res.status(404).json({ success: false, message: 'Customer not found.' });
+    }
+
+    // Cash back/refund must not exceed current advance balance (creditBalance < 0)
+    const currentBalance = Number(customer.creditBalance);
+    if (currentBalance >= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Customer does not have any advance payment balance to refund.',
+      });
+    }
+
+    const paybackAmount = Number(amount);
+    const availableAdvance = Math.abs(currentBalance);
+    if (paybackAmount > availableAdvance) {
+      return res.status(400).json({
+        success: false,
+        message: `Refund amount of PKR ${paybackAmount} exceeds the customer's available advance payment balance of PKR ${availableAdvance}.`,
+      });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      // Increment customer balance (moves from e.g. -10000 closer to 0, or up to 0)
+      const updatedCustomer = await tx.customer.update({
+        where: { id: Number(customerId) },
+        data: {
+          creditBalance: { increment: paybackAmount },
+        },
+      });
+
+      // Create credit transaction record with type 'PAYBACK'
+      const transaction = await tx.creditTransaction.create({
+        data: {
+          customerId: Number(customerId),
+          type: 'PAYBACK',
+          amount: paybackAmount,
+          description: description || 'Advance payment refund',
+          paymentMethod: paymentMethod || 'CASH',
+          transactionDate: new Date(),
+        },
+      });
+
+      return { customer: updatedCustomer, transaction };
+    });
+
+    res.status(201).json({
+      success: true,
+      message: `Refund of PKR ${paybackAmount} recorded successfully.`,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 
 // GET /api/credits/overdue
 export const getOverdue = async (req, res, next) => {

@@ -228,7 +228,7 @@ const POS = () => {
     }
     if (field === 'customerPhone') {
       if (!value) {
-        errs.customerPhone = 'Phone number is required';
+        delete errs.customerPhone;
       } else if (!/^\d{10,11}$/.test(value.replace(/[\s-]/g, ''))) {
         errs.customerPhone = 'Phone must be a valid number (10-11 digits)';
       } else {
@@ -248,7 +248,7 @@ const POS = () => {
     e.preventDefault();
 
     const nameErr = !customerName ? 'Customer name is required' : customerName.trim().length < 3 ? 'Name must be at least 3 characters' : null;
-    const phoneErr = !customerPhone ? 'Phone number is required' : !/^\d{10,11}$/.test(customerPhone.replace(/[\s-]/g, '')) ? 'Phone must be a valid number (10-11 digits)' : null;
+    const phoneErr = customerPhone && !/^\d{10,11}$/.test(customerPhone.replace(/[\s-]/g, '')) ? 'Phone must be a valid number (10-11 digits)' : null;
 
     if (nameErr || phoneErr) {
       setErrors({
@@ -868,8 +868,7 @@ const POS = () => {
             />
             <Input
               id="cust-phone-input"
-              label="Phone Number *"
-              required
+              label="Phone Number (Optional)"
               icon={Phone}
               placeholder="e.g. 03001234567"
               value={customerPhone}
@@ -990,7 +989,7 @@ const POS = () => {
                       <span>Rs. {parseFloat(latestBill.creditAmount).toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between text-gray-700 font-semibold">
-                      <span>Total Balance:</span>
+                      <span>Total Credit:</span>
                       <span>Rs. {parseFloat(latestBill.customer?.creditBalance || 0).toLocaleString()}</span>
                     </div>
                   </div>

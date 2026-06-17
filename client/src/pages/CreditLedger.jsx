@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
 import { Search, Landmark, BookOpen, Plus, Eye, DollarSign, Calendar, AlertCircle, User, FileText, CreditCard, Printer, RefreshCw } from 'lucide-react';
-import { getCreditSummary, getCustomerCredits, recordPayment, getOverdue } from '../api/credits';
+import { getCreditSummary, getCustomerCredits, recordPayment, recordPayback, getOverdue } from '../api/credits';
 import { getCustomers } from '../api/customers';
 import { getBillById } from '../api/billing';
 import Card from '../components/ui/Card';
@@ -15,13 +15,22 @@ import Button from '../components/ui/Button';
 import SearchBar from '../components/ui/SearchBar';
 import { formatCurrency } from '../utils/formatCurrency';
 import { formatDate, formatDateTime } from '../utils/formatDate';
-import { PAYMENT_METHOD_LABELS } from '../utils/constants';
+import { PAYMENT_METHOD_LABELS, MONTHS } from '../utils/constants';
 
 const CreditLedger = () => {
   const queryClient = useQueryClient();
+  const currentDate = new Date();
   
-  // Filters
+  // Tabs & Filters
+  const [activeTab, setActiveTab] = useState('udhar'); // 'udhar' or 'advance'
   const [search, setSearch] = useState('');
+  const [month, setMonth] = useState(currentDate.getMonth() + 1);
+  const [year, setYear] = useState(currentDate.getFullYear());
+
+  const yearOptions = Array.from({ length: 5 }, (_, i) => ({
+    value: currentDate.getFullYear() - i,
+    label: String(currentDate.getFullYear() - i),
+  }));
 
   // Selected customer for detailed ledger
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
@@ -36,6 +45,14 @@ const CreditLedger = () => {
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [errors, setErrors] = useState({});
 
+  // Payback modal & Validation
+  const [showPaybackModal, setShowPaybackModal] = useState(false);
+  const [paybackCustomerId, setPaybackCustomerId] = useState('');
+  const [paybackAmount, setPaybackAmount] = useState('');
+  const [paybackDescription, setPaybackDescription] = useState('');
+  const [paybackMethod, setPaybackMethod] = useState('CASH');
+  const [paybackErrors, setPaybackErrors] = useState({});
+
   // Printing receipt state
   const [selectedTxForPrint, setSelectedTxForPrint] = useState(null);
   const [showPrintModal, setShowPrintModal] = useState(false);
@@ -44,12 +61,13 @@ const CreditLedger = () => {
 
   // Fetch credit customers list
   const { data: summaryData, isLoading: summaryLoading } = useQuery({
-    queryKey: ['credits-summary'],
-    queryFn: getCreditSummary,
+    queryKey: ['credits-summary', activeTab, month, year],
+    queryFn: () => getCreditSummary(activeTab === 'advance' ? { month, year } : {}),
   });
   const creditSummary = summaryData?.data || summaryData || {};
   const creditCustomers = creditSummary.customers || [];
   const totalOutstanding = creditSummary.totalOutstanding || 0;
+  const totalAdvance = creditSummary.totalAdvance || 0;
 
   // Fetch overdue credits
   const { data: overdueData } = useQuery({
@@ -90,6 +108,22 @@ const CreditLedger = () => {
     },
     onError: (err) => {
       toast.error(err?.response?.data?.message || 'Failed to record payment');
+    }
+  });
+
+  const recordPaybackMutation = useMutation({
+    mutationFn: recordPayback,
+    onSuccess: () => {
+      toast.success('Cash returned successfully! Balance updated.');
+      queryClient.invalidateQueries(['credits-summary']);
+      queryClient.invalidateQueries(['customer-ledger']);
+      queryClient.invalidateQueries(['all-customers-for-dropdown']);
+      queryClient.invalidateQueries(['dashboard']);
+      setShowPaybackModal(false);
+      resetPaybackForm();
+    },
+    onError: (err) => {
+      toast.error(err?.response?.data?.message || 'Failed to record refund');
     }
   });
 
@@ -192,18 +226,101 @@ const CreditLedger = () => {
     });
   };
 
+  const handleOpenRecordPayback = (cId = '') => {
+    setPaybackCustomerId(cId);
+    setPaybackErrors({});
+    setShowPaybackModal(true);
+  };
+
+  const resetPaybackForm = () => {
+    setPaybackCustomerId('');
+    setPaybackAmount('');
+    setPaybackDescription('');
+    setPaybackMethod('CASH');
+    setPaybackErrors({});
+  };
+
+  const validatePaybackField = (field, value) => {
+    let errs = { ...paybackErrors };
+    
+    if (field === 'paybackCustomerId') {
+      if (!value) {
+        errs.paybackCustomerId = 'Please select a customer';
+      } else {
+        delete errs.paybackCustomerId;
+      }
+    }
+
+    if (field === 'paybackAmount') {
+      if (!value) {
+        errs.paybackAmount = 'Amount is required';
+      } else if (parseFloat(value) <= 0) {
+        errs.paybackAmount = 'Amount must be greater than 0';
+      } else {
+        delete errs.paybackAmount;
+      }
+    }
+
+    setPaybackErrors(errs);
+  };
+
+  const handlePaybackSubmit = (e) => {
+    e.preventDefault();
+    
+    const customerErr = !paybackCustomerId ? 'Please select a customer' : null;
+    let amountErr = null;
+    if (!paybackAmount) {
+      amountErr = 'Amount is required';
+    } else if (parseFloat(paybackAmount) <= 0) {
+      amountErr = 'Amount must be greater than 0';
+    }
+
+    if (customerErr || amountErr) {
+      setPaybackErrors({
+        paybackCustomerId: customerErr,
+        paybackAmount: amountErr
+      });
+      toast.error('Please resolve the errors in the form');
+      return;
+    }
+
+    const cust = creditCustomersOptions.find(c => c.id === parseInt(paybackCustomerId));
+    if (cust) {
+      const balance = parseFloat(cust.creditBalance) || 0;
+      if (balance >= 0) {
+        toast.error('Customer does not have any advance payment balance to refund.');
+        return;
+      }
+      const availableAdvance = Math.abs(balance);
+      if (parseFloat(paybackAmount) > availableAdvance) {
+        toast.error(`Refund amount cannot exceed available advance of Rs. ${availableAdvance}`);
+        return;
+      }
+    }
+
+    recordPaybackMutation.mutate({
+      customerId: parseInt(paybackCustomerId),
+      amount: parseFloat(paybackAmount),
+      description: paybackDescription || 'Advance payment refund',
+      paymentMethod: paybackMethod
+    });
+  };
+
+
 
   // Filter local credit list
-  const filteredCustomers = creditCustomers.filter(c => 
-    c.name.toLowerCase().includes(search.toLowerCase()) || 
-    (c.phone && c.phone.includes(search))
-  );
+  const filteredCustomers = creditCustomers.filter(c => {
+    const matchesSearch = c.name.toLowerCase().includes(search.toLowerCase()) || 
+      (c.phone && c.phone.includes(search));
+    const matchesTab = activeTab === 'advance' ? c.creditBalance < 0 : c.creditBalance > 0;
+    return matchesSearch && matchesTab;
+  });
 
   return (
     <div className="app-container animate-fade-in">
       
       {/* Header Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         
         {/* Total Outstanding */}
         <Card className="bg-gradient-to-br from-red-600/20 to-red-800/20 border-red-500/20">
@@ -214,6 +331,19 @@ const CreditLedger = () => {
             </div>
             <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center">
               <Landmark size={24} className="text-white" />
+            </div>
+          </div>
+        </Card>
+
+        {/* Total Advance Payments */}
+        <Card className="bg-gradient-to-br from-indigo-600/20 to-indigo-800/20 border-indigo-500/20">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-sm font-medium text-white/70">Total Advance Payments</p>
+              <p className="text-2xl font-bold text-white mt-1">{formatCurrency(totalAdvance)}</p>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center">
+              <DollarSign size={24} className="text-white" />
             </div>
           </div>
         </Card>
@@ -269,23 +399,73 @@ const CreditLedger = () => {
         </Card>
       )}
 
+      {/* Tabs Switcher */}
+      <div className="flex gap-3">
+        <Button
+          id="tab-udhar-ledger"
+          variant={activeTab === 'udhar' ? 'primary' : 'secondary'}
+          onClick={() => setActiveTab('udhar')}
+          className="w-full sm:w-auto"
+        >
+          Udhar Ledger
+        </Button>
+        <Button
+          id="tab-advance-payments"
+          variant={activeTab === 'advance' ? 'primary' : 'secondary'}
+          onClick={() => setActiveTab('advance')}
+          className="w-full sm:w-auto"
+        >
+          Advance Payments
+        </Button>
+      </div>
+
       {/* Filters & Actions */}
       <Card compact>
-        <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
-          <div className="w-full sm:w-80">
-            <SearchBar
-              id="credits-search"
-              placeholder="Search credit accounts by name/phone..."
-              value={search}
-              onChange={(val) => setSearch(val)}
-            />
+        <div className="flex flex-col lg:flex-row gap-4 justify-between items-center w-full">
+          <div className="flex flex-col sm:flex-row gap-4 items-center w-full lg:w-auto">
+            <div className="w-full sm:w-80">
+              <SearchBar
+                id="credits-search"
+                placeholder="Search accounts by name/phone..."
+                value={search}
+                onChange={(val) => setSearch(val)}
+              />
+            </div>
+            
+            {activeTab === 'advance' && (
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <div className="flex items-center gap-2.5 text-slate-400">
+                  <Calendar size={16} />
+                  <span className="text-xs font-semibold tracking-wide whitespace-nowrap">Period:</span>
+                </div>
+                <div className="w-36">
+                  <Select
+                    id="credits-month"
+                    options={MONTHS}
+                    value={month}
+                    onChange={(e) => setMonth(Number(e.target.value))}
+                    className="pos-filter-input pos-filter-select h-[38px] text-xs"
+                  />
+                </div>
+                <div className="w-24">
+                  <Select
+                    id="credits-year"
+                    options={yearOptions}
+                    value={year}
+                    onChange={(e) => setYear(Number(e.target.value))}
+                    className="pos-filter-input pos-filter-select h-[38px] text-xs"
+                  />
+                </div>
+              </div>
+            )}
           </div>
+          
           <Button
             id="btn-record-recovery"
             variant="success"
             icon={Plus}
             onClick={() => handleOpenRecordPayment()}
-            className="pos-filter-btn w-full sm:w-auto"
+            className="pos-filter-btn w-full lg:w-auto"
           >
             Record Payment Recovery
           </Button>
@@ -298,7 +478,13 @@ const CreditLedger = () => {
         <Table
           id="credits-table"
           loading={summaryLoading}
-          headers={['Customer Name', 'Phone Number', 'Last Transaction', 'Outstanding Balance (Udhar)', 'Actions']}
+          headers={[
+            'Customer Name', 
+            'Phone Number', 
+            'Last Transaction', 
+            activeTab === 'advance' ? 'Advance Balance' : 'Outstanding Balance (Udhar)', 
+            'Actions'
+          ]}
           showPagination={false}
         >
           {filteredCustomers.length > 0 ? (
@@ -340,6 +526,17 @@ const CreditLedger = () => {
                     >
                       Receive Cash
                     </Button>
+                    {activeTab === 'advance' && (
+                      <Button
+                        id={`btn-payback-${c.phone}`}
+                        variant="warning"
+                        size="sm"
+                        icon={RefreshCw}
+                        onClick={() => handleOpenRecordPayback(c.id)}
+                      >
+                        Return Cash
+                      </Button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -347,7 +544,7 @@ const CreditLedger = () => {
           ) : (
             <tr>
               <td colSpan={5} className="px-7 py-16 text-center text-slate-500">
-                No credit customer records found
+                {activeTab === 'advance' ? 'No advance payment records found' : 'No credit customer records found'}
               </td>
             </tr>
           )}
@@ -420,7 +617,7 @@ const CreditLedger = () => {
                             ) : (
                               <div className="flex flex-col">
                                 <span>{tx.description}</span>
-                                {tx.type === 'PAYMENT' && (
+                                {(tx.type === 'PAYMENT' || tx.type === 'PAYBACK') && (
                                   <span className="text-[11px] text-slate-400 mt-0.5">
                                     Method: {PAYMENT_METHOD_LABELS[tx.paymentMethod] || tx.paymentMethod || 'Cash'}
                                   </span>
@@ -429,14 +626,16 @@ const CreditLedger = () => {
                             )}
                           </td>
                            <td className="px-6 py-3.5">
-                             <Badge variant={tx.type === 'CREDIT' ? 'danger' : 'success'}>
+                             <Badge variant={tx.type === 'CREDIT' ? 'danger' : tx.type === 'PAYBACK' ? 'warning' : 'success'}>
                                {tx.type === 'CREDIT' 
                                  ? 'CREDIT' 
-                                 : (PAYMENT_METHOD_LABELS[tx.paymentMethod] || tx.paymentMethod || 'Cash')}
+                                 : tx.type === 'PAYBACK'
+                                   ? 'CASH BACK'
+                                   : (PAYMENT_METHOD_LABELS[tx.paymentMethod] || tx.paymentMethod || 'Cash')}
                              </Badge>
                            </td>
                            <td className="px-6 py-3.5 text-right font-semibold text-red-400">
-                             {tx.type === 'CREDIT' ? formatCurrency(tx.amount) : ''}
+                             {(tx.type === 'CREDIT' || tx.type === 'PAYBACK') ? formatCurrency(tx.amount) : ''}
                            </td>
                            <td className="px-6 py-3.5 text-right font-semibold text-emerald-400">
                              {tx.type === 'PAYMENT' ? formatCurrency(tx.amount) : ''}
@@ -549,11 +748,93 @@ const CreditLedger = () => {
           </form>
         </Modal>
       )}
+
+      {/* Record Advance Refund (Payback) Modal */}
+      {showPaybackModal && (
+        <Modal
+          id="record-payback-modal"
+          title="Return Advance Payment (Cash Back)"
+          onClose={() => setShowPaybackModal(false)}
+          size="lg"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setShowPaybackModal(false)}>Cancel</Button>
+              <Button 
+                type="submit" 
+                variant="warning"
+                form="payback-form"
+                loading={recordPaybackMutation.isPending}
+              >
+                Return Cash
+              </Button>
+            </>
+          }
+        >
+          <form id="payback-form" onSubmit={handlePaybackSubmit} className="space-y-5">
+              <Select
+                id="payback-customer-select"
+                label="Select Customer *"
+                required
+                icon={User}
+                options={creditCustomersOptions
+                  .filter(c => parseFloat(c.creditBalance) < 0)
+                  .map(c => {
+                    const balance = parseFloat(c.creditBalance) || 0;
+                    return {
+                      value: c.id,
+                      label: `${c.name} (${c.phone || 'No Phone'}) - Advance: ${formatCurrency(Math.abs(balance))}`
+                    };
+                  })}
+                value={paybackCustomerId}
+                error={paybackErrors.paybackCustomerId}
+                onChange={(e) => { setPaybackCustomerId(e.target.value); if (paybackErrors.paybackCustomerId || paybackErrors.paybackAmount) validatePaybackField('paybackCustomerId', e.target.value); }}
+                onBlur={(e) => validatePaybackField('paybackCustomerId', e.target.value)}
+              />
+
+              <Input
+                id="payback-amount"
+                label="Refund Amount (PKR) *"
+                type="number"
+                required
+                min="1"
+                icon={DollarSign}
+                value={paybackAmount}
+                error={paybackErrors.paybackAmount}
+                onChange={(e) => { setPaybackAmount(e.target.value); if (paybackErrors.paybackAmount) validatePaybackField('paybackAmount', e.target.value); }}
+                onBlur={(e) => validatePaybackField('paybackAmount', e.target.value)}
+              />
+
+              <Select
+                id="payback-payment-method"
+                label="Refund Method *"
+                required
+                icon={CreditCard}
+                options={[
+                  { value: 'CASH', label: 'Cash' },
+                  { value: 'JAZZCASH', label: 'JazzCash' },
+                  { value: 'EASYPAISA', label: 'EasyPaisa' },
+                  { value: 'BANK_TRANSFER', label: 'Bank Transfer' },
+                ]}
+                value={paybackMethod}
+                onChange={(e) => setPaybackMethod(e.target.value)}
+              />
+
+              <Input
+                id="payback-desc"
+                label="Refund Reference / Description"
+                icon={FileText}
+                placeholder="e.g. Advance payment refund..."
+                value={paybackDescription}
+                onChange={(e) => setPaybackDescription(e.target.value)}
+              />
+          </form>
+        </Modal>
+      )}
       {/* Receipt Print Modal */}
       {showPrintModal && selectedTxForPrint && (
         <Modal
           id="print-receipt-modal"
-          title={selectedTxForPrint.type === 'CREDIT' ? 'Print Bill Invoice' : 'Print Recovery Receipt'}
+          title={selectedTxForPrint.type === 'CREDIT' ? 'Print Bill Invoice' : selectedTxForPrint.type === 'PAYBACK' ? 'Print Cash Back Receipt' : 'Print Recovery Receipt'}
           onClose={() => { setShowPrintModal(false); setSelectedTxForPrint(null); setPrintBillDetails(null); }}
         >
           {loadingPrintBill ? (
@@ -656,7 +937,7 @@ const CreditLedger = () => {
                 <Button variant="primary" icon={Printer} onClick={handlePrint}>Print Invoice</Button>
               </div>
             </div>
-          ) : selectedTxForPrint.type === 'PAYMENT' ? (
+          ) : (selectedTxForPrint.type === 'PAYMENT' || selectedTxForPrint.type === 'PAYBACK') ? (
             <div className="space-y-6">
               <div
                 id="receipt-print-area"
@@ -666,19 +947,25 @@ const CreditLedger = () => {
                   <h2 className="text-sm font-bold tracking-wide">DAWOOD AGRO TRADERS</h2>
                   <p className="text-[10px] text-gray-600">Jatoi Road Near Zrai Bank Shah Jamal</p>
                   <p className="text-[10px] text-gray-600">Phone: 0340-0736201, 0302-7338805</p>
-                  <p className="text-[10px] font-mono mt-2 text-gray-700">RECEIPT NO: REC-{selectedTxForPrint.id}</p>
+                  <p className="text-[10px] font-mono mt-2 text-gray-700">
+                    {selectedTxForPrint.type === 'PAYBACK' ? `REFUND NO: REF-${selectedTxForPrint.id}` : `RECEIPT NO: REC-${selectedTxForPrint.id}`}
+                  </p>
                   <p className="text-[9px] text-gray-500">Date: {new Date(selectedTxForPrint.transactionDate).toLocaleString('en-PK')}</p>
                 </div>
 
                 <div className="space-y-1 mb-4 border-b border-dashed border-gray-400 pb-3 text-gray-900 text-left">
                   <p><span className="font-semibold text-gray-700">Customer Name:</span> {selectedCustomerName || 'N/A'}</p>
-                  <p><span className="font-semibold text-gray-700">Payment Method:</span> {PAYMENT_METHOD_LABELS[selectedTxForPrint.paymentMethod] || selectedTxForPrint.paymentMethod || 'Cash'}</p>
-                  <p><span className="font-semibold text-gray-700">Description:</span> {selectedTxForPrint.description || 'Credit Recovery Payment'}</p>
+                  <p><span className="font-semibold text-gray-700">
+                    {selectedTxForPrint.type === 'PAYBACK' ? 'Refund Method:' : 'Payment Method:'}
+                  </span> {PAYMENT_METHOD_LABELS[selectedTxForPrint.paymentMethod] || selectedTxForPrint.paymentMethod || 'Cash'}</p>
+                  <p><span className="font-semibold text-gray-700">Description:</span> {selectedTxForPrint.description || (selectedTxForPrint.type === 'PAYBACK' ? 'Advance Payment Refund' : 'Credit Recovery Payment')}</p>
                 </div>
 
                 <div className="space-y-2.5 font-medium mt-4 text-gray-900">
                   <div className="flex justify-between text-sm font-bold text-black border-b border-gray-300 pb-1">
-                    <span>Amount Recovered:</span>
+                    <span>
+                      {selectedTxForPrint.type === 'PAYBACK' ? 'Amount Refunded:' : 'Amount Recovered:'}
+                    </span>
                     <span>Rs. {parseFloat(selectedTxForPrint.amount).toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between text-xs text-gray-600 pt-1">
@@ -688,7 +975,9 @@ const CreditLedger = () => {
                 </div>
 
                 <div className="text-center space-y-1 mt-6 pt-3 border-t border-dashed border-gray-400">
-                  <p className="text-[10px] font-semibold text-gray-700">Thank you for your payment!</p>
+                  <p className="text-[10px] font-semibold text-gray-700">
+                    {selectedTxForPrint.type === 'PAYBACK' ? 'Refund processed successfully.' : 'Thank you for your payment!'}
+                  </p>
                 </div>
               </div>
 

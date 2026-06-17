@@ -93,7 +93,7 @@ const Customers = () => {
     }
     if (field === 'phone') {
       if (!value) {
-        errs.phone = 'Phone number is required';
+        delete errs.phone;
       } else if (!/^\d{10,11}$/.test(value.replace(/[\s-]/g, ''))) {
         errs.phone = 'Phone must be a valid number (10-11 digits)';
       } else {
@@ -142,7 +142,7 @@ const Customers = () => {
     
     // Run all validations
     const nameErr = !name ? 'Customer name is required' : name.trim().length < 3 ? 'Name must be at least 3 characters' : null;
-    const phoneErr = !phone ? 'Phone number is required' : !/^\d{10,11}$/.test(phone.replace(/[\s-]/g, '')) ? 'Phone must be a valid number (10-11 digits)' : null;
+    const phoneErr = phone && !/^\d{10,11}$/.test(phone.replace(/[\s-]/g, '')) ? 'Phone must be a valid number (10-11 digits)' : null;
     
     if (nameErr || phoneErr) {
       setErrors({
@@ -296,8 +296,7 @@ const Customers = () => {
               />
               <Input
                 id="c-phone"
-                label="Phone Number *"
-                required
+                label="Phone Number (Optional)"
                 icon={Phone}
                 placeholder="e.g. 03001234567..."
                 value={phone}

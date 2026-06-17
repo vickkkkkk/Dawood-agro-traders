@@ -97,6 +97,7 @@ export const getDashboard = async (req, res, next) => {
     // Total stock value & outstanding credits
     let totalStockValue = 0;
     let totalCredits = 0;
+    let totalAdvance = 0;
 
     if (periodStart <= today) {
       const evaluationEnd = periodEnd > today ? today : periodEnd;
@@ -181,7 +182,7 @@ export const getDashboard = async (req, res, next) => {
         if (!creditChangesAfter[tx.customerId]) {
           creditChangesAfter[tx.customerId] = 0;
         }
-        if (tx.type === 'CREDIT') {
+        if (tx.type === 'CREDIT' || tx.type === 'PAYBACK') {
           creditChangesAfter[tx.customerId] += Number(tx.amount);
         } else if (tx.type === 'PAYMENT') {
           creditChangesAfter[tx.customerId] -= Number(tx.amount);
@@ -194,6 +195,16 @@ export const getDashboard = async (req, res, next) => {
         const historicalBal = currentBal - changeAfter;
         if (historicalBal > 0) {
           return sum + historicalBal;
+        }
+        return sum;
+      }, 0);
+
+      totalAdvance = customers.reduce((sum, c) => {
+        const currentBal = Number(c.creditBalance);
+        const changeAfter = creditChangesAfter[c.id] || 0;
+        const historicalBal = currentBal - changeAfter;
+        if (historicalBal < 0) {
+          return sum + Math.abs(historicalBal);
         }
         return sum;
       }, 0);
@@ -220,6 +231,7 @@ export const getDashboard = async (req, res, next) => {
         creditPayments,
         totalStockValue,
         totalCredits,
+        totalAdvance,
         lowStockCount,
         totalCreditConsume,
         period: {
