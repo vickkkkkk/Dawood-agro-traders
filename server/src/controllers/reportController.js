@@ -66,7 +66,7 @@ export const getDashboard = async (req, res, next) => {
       },
     });
 
-    const cashPayments = periodBills
+    const cashPaymentsFromBills = periodBills
       .reduce((sum, b) => {
         if (b.paymentMethod?.toUpperCase() === 'CASH' || b.paymentMethod?.toUpperCase() === 'CREDIT') {
           return sum + Number(b.amountPaid);
@@ -74,7 +74,7 @@ export const getDashboard = async (req, res, next) => {
         return sum;
       }, 0);
 
-    const onlinePayments = periodBills
+    const onlinePaymentsFromBills = periodBills
       .filter((b) => ['JAZZCASH', 'EASYPAISA', 'BANK_TRANSFER'].includes(b.paymentMethod?.toUpperCase()))
       .reduce((sum, b) => sum + Number(b.amountPaid), 0);
 
@@ -82,8 +82,35 @@ export const getDashboard = async (req, res, next) => {
       .filter((b) => b.paymentMethod?.toUpperCase() === 'CREDIT')
       .reduce((sum, b) => sum + Number(b.creditAmount), 0);
 
-    const totalSales = cashPayments + onlinePayments + creditPayments;
     const billCount = periodBills.length;
+
+    // Fetch CreditTransaction PAYMENT and PAYBACK records in the period.
+    // PAYMENT = cash received (adds to hand), PAYBACK = cash returned (subtracts from hand)
+    const creditTxActivity = await prisma.creditTransaction.findMany({
+      where: {
+        type: { in: ['PAYMENT', 'PAYBACK'] },
+        transactionDate: { gte: periodStart, lte: periodEnd },
+      },
+      select: { type: true, amount: true, paymentMethod: true },
+    });
+
+    const cashFromCreditTx = creditTxActivity
+      .filter((tx) => !['JAZZCASH', 'EASYPAISA', 'BANK_TRANSFER'].includes(tx.paymentMethod?.toUpperCase()))
+      .reduce((sum, tx) => {
+        const amt = Number(tx.amount);
+        return tx.type === 'PAYMENT' ? sum + amt : sum - amt;
+      }, 0);
+
+    const onlineFromCreditTx = creditTxActivity
+      .filter((tx) => ['JAZZCASH', 'EASYPAISA', 'BANK_TRANSFER'].includes(tx.paymentMethod?.toUpperCase()))
+      .reduce((sum, tx) => {
+        const amt = Number(tx.amount);
+        return tx.type === 'PAYMENT' ? sum + amt : sum - amt;
+      }, 0);
+
+    const cashPayments = cashPaymentsFromBills + cashFromCreditTx;
+    const onlinePayments = onlinePaymentsFromBills + onlineFromCreditTx;
+    const totalSales = cashPayments + onlinePayments + creditPayments;
 
     let totalCreditConsume = 0;
     for (const b of periodBills) {
@@ -255,6 +282,7 @@ export const getDailySales = async (req, res, next) => {
     const startDate = new Date(targetYear, targetMonth - 1, 1);
     const endDate = new Date(targetYear, targetMonth, 0, 23, 59, 59, 999);
 
+    // Fetch bills for the period
     const bills = await prisma.bill.findMany({
       where: {
         billDate: { gte: startDate, lte: endDate },
@@ -271,7 +299,26 @@ export const getDailySales = async (req, res, next) => {
       orderBy: { billDate: 'asc' },
     });
 
+    // Fetch CreditTransaction PAYMENT and PAYBACK records for the period
+    // PAYMENT = cash received (receivable collection / advance received)
+    // PAYBACK = cash returned to customer (subtracts from Rcv/Adv and Cash in Hand)
+    const creditTxActivity = await prisma.creditTransaction.findMany({
+      where: {
+        type: { in: ['PAYMENT', 'PAYBACK'] },
+        transactionDate: { gte: startDate, lte: endDate },
+      },
+      select: {
+        transactionDate: true,
+        type: true,
+        amount: true,
+        paymentMethod: true,
+      },
+      orderBy: { transactionDate: 'asc' },
+    });
+
     const dailyMap = {};
+
+    // --- Pass 1: aggregate bills ---
     for (const bill of bills) {
       const dateKey = bill.billDate.toISOString().slice(0, 10);
       if (!dailyMap[dateKey]) {
@@ -283,11 +330,14 @@ export const getDailySales = async (req, res, next) => {
           online: 0,
           credit: 0,
           totalDiscount: 0,
+          receivablesCollected: 0,   // net of PAYMENT - PAYBACK (cash)
+          receivablesOnline: 0,      // net of PAYMENT - PAYBACK (online)
+          cashInHand: 0,             // cash + receivablesCollected
         };
       }
       dailyMap[dateKey].billCount += 1;
       dailyMap[dateKey].totalDiscount += Number(bill.discount);
-      
+
       let billCash = 0;
       let billOnline = 0;
       let billCredit = 0;
@@ -308,9 +358,49 @@ export const getDailySales = async (req, res, next) => {
       dailyMap[dateKey].total += (billCash + billOnline + billCredit);
     }
 
+    // --- Pass 2: overlay PAYMENT and PAYBACK credit transactions ---
+    // PAYMENT adds cash in; PAYBACK removes cash out
+    for (const tx of creditTxActivity) {
+      const dateKey = tx.transactionDate.toISOString().slice(0, 10);
+      if (!dailyMap[dateKey]) {
+        dailyMap[dateKey] = {
+          date: dateKey,
+          total: 0,
+          billCount: 0,
+          cash: 0,
+          online: 0,
+          credit: 0,
+          totalDiscount: 0,
+          receivablesCollected: 0,
+          receivablesOnline: 0,
+          cashInHand: 0,
+        };
+      }
+
+      const isOnline = ['JAZZCASH', 'EASYPAISA', 'BANK_TRANSFER'].includes(
+        tx.paymentMethod?.toUpperCase()
+      );
+      const isPayment = tx.type === 'PAYMENT';
+      const delta = isPayment ? Number(tx.amount) : -Number(tx.amount);
+
+      if (isOnline) {
+        dailyMap[dateKey].receivablesOnline += delta;
+        dailyMap[dateKey].online += delta;
+      } else {
+        // Cash (or unspecified): PAYMENT adds, PAYBACK subtracts
+        dailyMap[dateKey].receivablesCollected += delta;
+      }
+      dailyMap[dateKey].total += delta;
+    }
+
+    // --- Pass 3: compute cashInHand per day ---
+    for (const day of Object.values(dailyMap)) {
+      day.cashInHand = day.cash + day.receivablesCollected;
+    }
+
     res.json({
       success: true,
-      data: Object.values(dailyMap),
+      data: Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date)),
       month: targetMonth,
       year: targetYear,
     });
