@@ -2,14 +2,14 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, ShoppingCart, Receipt, Package,
   Truck, Users, BookOpen, UserCog, ChevronLeft,
-  ChevronRight, LogOut, Wheat, X
+  ChevronRight, LogOut, Wheat, X, FileSpreadsheet, TrendingUp
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { NAV_ITEMS } from '../../utils/constants';
 
 const iconMap = {
   LayoutDashboard, ShoppingCart, Receipt, Package,
-  Truck, Users, BookOpen, UserCog,
+  Truck, Users, BookOpen, UserCog, FileSpreadsheet, TrendingUp
 };
 
 const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }) => {

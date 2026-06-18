@@ -94,22 +94,67 @@ export const createProduct = async (req, res, next) => {
       batchNo,
     } = req.body;
 
-    const product = await prisma.product.create({
-      data: {
-        name,
-        sku,
-        categoryId: Number(categoryId),
-        purchasePrice: Number(purchasePrice),
-        salePrice: Number(salePrice),
-        stockQty: Number(stockQty),
-        unit,
-        lowStockAlert: Number(lowStockAlert),
-        expiryDate: expiryDate ? new Date(expiryDate) : null,
-        batchNo: batchNo || null,
-      },
-      include: {
-        category: { select: { id: true, name: true } },
-      },
+    const product = await prisma.$transaction(async (tx) => {
+      const created = await tx.product.create({
+        data: {
+          name,
+          sku,
+          categoryId: Number(categoryId),
+          purchasePrice: Number(purchasePrice),
+          salePrice: Number(salePrice),
+          stockQty: Number(stockQty),
+          unit,
+          lowStockAlert: Number(lowStockAlert),
+          expiryDate: expiryDate ? new Date(expiryDate) : null,
+          batchNo: batchNo || null,
+        },
+        include: {
+          category: { select: { id: true, name: true } },
+        },
+      });
+
+      const qty = Number(stockQty);
+      if (qty > 0) {
+        let systemSupplier = await tx.supplier.findFirst({
+          where: { name: 'System / Initial Stock' }
+        });
+        if (!systemSupplier) {
+          systemSupplier = await tx.supplier.create({
+            data: {
+              name: 'System / Initial Stock',
+              company: 'Internal System Adjustment',
+            }
+          });
+        }
+
+        const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const grnNo = `GRN-INIT-${dateStr}-${Date.now().toString().slice(-4)}`;
+
+        await tx.purchase.create({
+          data: {
+            grnNo,
+            supplierId: systemSupplier.id,
+            userId: req.user.id,
+            total: Number(purchasePrice) * qty,
+            status: 'RECEIVED',
+            purchaseDate: new Date(),
+            items: {
+              create: [
+                {
+                  productId: created.id,
+                  quantity: qty,
+                  unitPrice: Number(purchasePrice),
+                  total: Number(purchasePrice) * qty,
+                  batchNo: batchNo || null,
+                  expiryDate: expiryDate ? new Date(expiryDate) : null,
+                }
+              ]
+            }
+          }
+        });
+      }
+
+      return created;
     });
 
     res.status(201).json({
@@ -156,12 +201,60 @@ export const updateProduct = async (req, res, next) => {
     if (expiryDate !== undefined) updateData.expiryDate = expiryDate ? new Date(expiryDate) : null;
     if (batchNo !== undefined) updateData.batchNo = batchNo || null;
 
-    const product = await prisma.product.update({
-      where: { id: Number(id) },
-      data: updateData,
-      include: {
-        category: { select: { id: true, name: true } },
-      },
+    const product = await prisma.$transaction(async (tx) => {
+      const updated = await tx.product.update({
+        where: { id: Number(id) },
+        data: updateData,
+        include: {
+          category: { select: { id: true, name: true } },
+        },
+      });
+
+      if (stockQty !== undefined) {
+        const difference = Number(stockQty) - Number(existing.stockQty);
+        if (difference > 0) {
+          let systemSupplier = await tx.supplier.findFirst({
+            where: { name: 'System / Initial Stock' }
+          });
+          if (!systemSupplier) {
+            systemSupplier = await tx.supplier.create({
+              data: {
+                name: 'System / Initial Stock',
+                company: 'Internal System Adjustment',
+              }
+            });
+          }
+
+          const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+          const grnNo = `GRN-ADJ-${dateStr}-${Date.now().toString().slice(-4)}`;
+          const costBasis = Number(purchasePrice !== undefined ? purchasePrice : existing.purchasePrice);
+
+          await tx.purchase.create({
+            data: {
+              grnNo,
+              supplierId: systemSupplier.id,
+              userId: req.user.id,
+              total: costBasis * difference,
+              status: 'RECEIVED',
+              purchaseDate: new Date(),
+              items: {
+                create: [
+                  {
+                    productId: updated.id,
+                    quantity: difference,
+                    unitPrice: costBasis,
+                    total: costBasis * difference,
+                    batchNo: batchNo || updated.batchNo || null,
+                    expiryDate: expiryDate ? new Date(expiryDate) : (updated.expiryDate || null),
+                  }
+                ]
+              }
+            }
+          });
+        }
+      }
+
+      return updated;
     });
 
     res.json({

@@ -17,6 +17,10 @@ import Purchases from './pages/Purchases';
 import Customers from './pages/Customers';
 import CreditLedger from './pages/CreditLedger';
 import UserManagement from './pages/UserManagement';
+import PurchaseLedger from './pages/PurchaseLedger';
+import PurchaseLedgerDetail from './pages/PurchaseLedgerDetail';
+import SalesLedger from './pages/SalesLedger';
+import SalesLedgerDetail from './pages/SalesLedgerDetail';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -48,6 +52,10 @@ function App() {
                   <Route path="/inventory" element={<Inventory />} />
                   <Route path="/purchases" element={<Purchases />} />
                   <Route path="/credits" element={<CreditLedger />} />
+                  <Route path="/purchase-ledger" element={<PurchaseLedger />} />
+                  <Route path="/purchase-ledger/:productId" element={<PurchaseLedgerDetail />} />
+                  <Route path="/sales-ledger" element={<SalesLedger />} />
+                  <Route path="/sales-ledger/:productId" element={<SalesLedgerDetail />} />
                 </Route>
 
                 {/* All Roles */}

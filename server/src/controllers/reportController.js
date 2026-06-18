@@ -676,3 +676,281 @@ export const getStockValue = async (req, res, next) => {
     next(error);
   }
 };
+
+// GET /api/reports/purchase-ledger
+export const getPurchaseLedger = async (req, res, next) => {
+  try {
+    const products = await prisma.product.findMany({
+      select: {
+        id: true,
+        name: true,
+        sku: true,
+        unit: true,
+        purchasePrice: true,
+        purchaseItems: {
+          where: {
+            purchase: { status: 'RECEIVED' }
+          },
+          select: {
+            quantity: true,
+            unitPrice: true,
+            total: true,
+          }
+        }
+      },
+      orderBy: { name: 'asc' }
+    });
+
+    const data = products.map(p => {
+      const totalQty = p.purchaseItems.reduce((sum, item) => sum + Number(item.quantity), 0);
+      const totalCost = p.purchaseItems.reduce((sum, item) => sum + Number(item.total), 0);
+      const batchCount = p.purchaseItems.length;
+      
+      const avgPrice = totalQty > 0 ? (totalCost / totalQty) : Number(p.purchasePrice);
+
+      return {
+        id: p.id,
+        name: p.name,
+        sku: p.sku,
+        unit: p.unit,
+        totalQuantityPurchased: totalQty,
+        averagePurchasePrice: avgPrice,
+        latestPurchasePrice: p.purchasePrice,
+        batchCount
+      };
+    });
+
+    res.json({
+      success: true,
+      data
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /api/reports/purchase-ledger/:productId
+export const getProductPurchaseDetail = async (req, res, next) => {
+  try {
+    const { productId } = req.params;
+
+    const product = await prisma.product.findUnique({
+      where: { id: Number(productId) },
+      select: { id: true, name: true, sku: true, unit: true }
+    });
+
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found.' });
+    }
+
+    const purchaseItems = await prisma.purchaseItem.findMany({
+      where: {
+        productId: Number(productId),
+        purchase: { status: 'RECEIVED' }
+      },
+      include: {
+        purchase: {
+          select: {
+            grnNo: true,
+            purchaseDate: true,
+            supplier: { select: { name: true, company: true } }
+          }
+        }
+      },
+      orderBy: {
+        purchase: { purchaseDate: 'desc' }
+      }
+    });
+
+    const history = purchaseItems.map(item => ({
+      id: item.id,
+      grnNo: item.purchase.grnNo,
+      date: item.purchase.purchaseDate,
+      supplierName: item.purchase.supplier.name,
+      supplierCompany: item.purchase.supplier.company,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      total: item.total,
+      batchNo: item.batchNo,
+      expiryDate: item.expiryDate
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        product,
+        history
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /api/reports/sales-ledger
+export const getSalesLedger = async (req, res, next) => {
+  try {
+    const products = await prisma.product.findMany({
+      select: {
+        id: true,
+        name: true,
+        sku: true,
+        unit: true,
+        purchasePrice: true,
+        purchaseItems: {
+          where: {
+            purchase: { status: 'RECEIVED' }
+          },
+          select: {
+            quantity: true,
+            unitPrice: true,
+            total: true
+          }
+        },
+        billItems: {
+          where: {
+            bill: { isVoid: false }
+          },
+          select: {
+            quantity: true,
+            returnedQuantity: true,
+            unitPrice: true,
+            total: true
+          }
+        }
+      },
+      orderBy: { name: 'asc' }
+    });
+
+    const data = products.map(p => {
+      const totalPurchased = p.purchaseItems.reduce((sum, item) => sum + Number(item.quantity), 0);
+      const totalPurchaseCost = p.purchaseItems.reduce((sum, item) => sum + Number(item.total), 0);
+      
+      const wac = totalPurchased > 0 ? (totalPurchaseCost / totalPurchased) : Number(p.purchasePrice);
+
+      let totalSold = 0;
+      let totalRevenue = 0;
+      
+      for (const item of p.billItems) {
+        const netQty = Number(item.quantity) - Number(item.returnedQuantity || 0);
+        if (netQty > 0) {
+          totalSold += netQty;
+          totalRevenue += netQty * Number(item.unitPrice);
+        }
+      }
+
+      const avgSalePrice = totalSold > 0 ? (totalRevenue / totalSold) : 0;
+      const remainingQty = totalPurchased - totalSold;
+      
+      const cogs = totalSold * wac;
+      const netProfit = totalRevenue - cogs;
+
+      return {
+        id: p.id,
+        name: p.name,
+        sku: p.sku,
+        unit: p.unit,
+        totalQuantityPurchased: totalPurchased,
+        totalQuantitySold: totalSold,
+        remainingQuantity: remainingQty,
+        weightedAverageCost: wac,
+        averageSalePrice: avgSalePrice,
+        totalRevenue,
+        cogs,
+        netProfit
+      };
+    });
+
+    res.json({
+      success: true,
+      data
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /api/reports/sales-ledger/:productId
+export const getProductSalesDetail = async (req, res, next) => {
+  try {
+    const { productId } = req.params;
+
+    const product = await prisma.product.findUnique({
+      where: { id: Number(productId) },
+      select: { id: true, name: true, sku: true, unit: true, purchasePrice: true }
+    });
+
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found.' });
+    }
+
+    const purchaseItems = await prisma.purchaseItem.findMany({
+      where: {
+        productId: Number(productId),
+        purchase: { status: 'RECEIVED' }
+      },
+      select: {
+        quantity: true,
+        total: true
+      }
+    });
+
+    const totalPurchased = purchaseItems.reduce((sum, item) => sum + Number(item.quantity), 0);
+    const totalPurchaseCost = purchaseItems.reduce((sum, item) => sum + Number(item.total), 0);
+    const wac = totalPurchased > 0 ? (totalPurchaseCost / totalPurchased) : Number(product.purchasePrice);
+
+    const billItems = await prisma.billItem.findMany({
+      where: {
+        productId: Number(productId),
+        bill: { isVoid: false }
+      },
+      include: {
+        bill: {
+          select: {
+            billNo: true,
+            billDate: true,
+            customer: { select: { name: true } }
+          }
+        }
+      },
+      orderBy: {
+        bill: { billDate: 'desc' }
+      }
+    });
+
+    const history = billItems.map(item => {
+      const netQty = Number(item.quantity) - Number(item.returnedQuantity || 0);
+      const revenue = netQty * Number(item.unitPrice);
+      const cost = netQty * wac;
+      const profit = revenue - cost;
+
+      return {
+        id: item.id,
+        billNo: item.bill.billNo,
+        date: item.bill.billDate,
+        customerName: item.bill.customer?.name || 'Walk-in Customer',
+        quantitySold: netQty,
+        salePrice: Number(item.unitPrice),
+        totalRevenue: revenue,
+        costBasis: cost,
+        profit
+      };
+    }).filter(h => h.quantitySold > 0);
+
+    const totalNetProfit = history.reduce((sum, h) => sum + h.profit, 0);
+    const totalQuantitySold = history.reduce((sum, h) => sum + h.quantitySold, 0);
+
+    res.json({
+      success: true,
+      data: {
+        product,
+        weightedAverageCost: wac,
+        totalQuantitySold,
+        totalNetProfit,
+        history
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};

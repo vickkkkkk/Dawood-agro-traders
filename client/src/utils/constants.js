@@ -79,6 +79,8 @@ export const NAV_ITEMS = [
   { path: '/purchases', label: 'Purchases', icon: 'Truck', roles: ['ADMIN', 'MANAGER'] },
   { path: '/customers', label: 'Customers', icon: 'Users', roles: ['ADMIN', 'MANAGER', 'CASHIER'] },
   { path: '/credits', label: 'Credit Ledger', icon: 'BookOpen', roles: ['ADMIN', 'MANAGER'] },
+  { path: '/purchase-ledger', label: 'Purchase Ledger', icon: 'FileSpreadsheet', roles: ['ADMIN', 'MANAGER'] },
+  { path: '/sales-ledger', label: 'Sales Ledger', icon: 'TrendingUp', roles: ['ADMIN', 'MANAGER'] },
   { path: '/users', label: 'User Management', icon: 'UserCog', roles: ['ADMIN'] },
 ];
 
