@@ -308,6 +308,7 @@ export const getDailySales = async (req, res, next) => {
         transactionDate: { gte: startDate, lte: endDate },
       },
       select: {
+        customerId: true,
         transactionDate: true,
         type: true,
         amount: true,
@@ -330,9 +331,10 @@ export const getDailySales = async (req, res, next) => {
           online: 0,
           credit: 0,
           totalDiscount: 0,
-          receivablesCollected: 0,   // net of PAYMENT - PAYBACK (cash)
-          receivablesOnline: 0,      // net of PAYMENT - PAYBACK (online)
-          cashInHand: 0,             // cash + receivablesCollected
+          receive: 0,
+          advance: 0,
+          payback: 0,
+          cashInHand: 0,
         };
       }
       dailyMap[dateKey].billCount += 1;
@@ -358,44 +360,125 @@ export const getDailySales = async (req, res, next) => {
       dailyMap[dateKey].total += (billCash + billOnline + billCredit);
     }
 
-    // --- Pass 2: overlay PAYMENT and PAYBACK credit transactions ---
-    // PAYMENT adds cash in; PAYBACK removes cash out
-    for (const tx of creditTxActivity) {
-      const dateKey = tx.transactionDate.toISOString().slice(0, 10);
-      if (!dailyMap[dateKey]) {
-        dailyMap[dateKey] = {
-          date: dateKey,
-          total: 0,
-          billCount: 0,
-          cash: 0,
-          online: 0,
-          credit: 0,
-          totalDiscount: 0,
-          receivablesCollected: 0,
-          receivablesOnline: 0,
-          cashInHand: 0,
-        };
-      }
+    // --- Pass 2: rebuild balances and compute receive/advance/payback ---
+    const activeCustomerIds = [...new Set(creditTxActivity.map(tx => tx.customerId).filter(Boolean))];
+    
+    let customerTransactions = [];
+    if (activeCustomerIds.length > 0) {
+      customerTransactions = await prisma.creditTransaction.findMany({
+        where: {
+          customerId: { in: activeCustomerIds },
+          transactionDate: { lte: endDate },
+        },
+        orderBy: [
+          { transactionDate: 'asc' },
+          { id: 'asc' },
+        ],
+      });
+    }
 
-      const isOnline = ['JAZZCASH', 'EASYPAISA', 'BANK_TRANSFER'].includes(
-        tx.paymentMethod?.toUpperCase()
-      );
-      const isPayment = tx.type === 'PAYMENT';
-      const delta = isPayment ? Number(tx.amount) : -Number(tx.amount);
-
-      if (isOnline) {
-        dailyMap[dateKey].receivablesOnline += delta;
-        dailyMap[dateKey].online += delta;
-      } else {
-        // Cash (or unspecified): PAYMENT adds, PAYBACK subtracts
-        dailyMap[dateKey].receivablesCollected += delta;
+    const txByCustomer = {};
+    for (const tx of customerTransactions) {
+      if (!txByCustomer[tx.customerId]) {
+        txByCustomer[tx.customerId] = [];
       }
-      dailyMap[dateKey].total += delta;
+      txByCustomer[tx.customerId].push(tx);
+    }
+
+    for (const customerId of activeCustomerIds) {
+      const txs = txByCustomer[customerId] || [];
+      let balance = 0;
+
+      for (const tx of txs) {
+        const dateKey = tx.transactionDate.toISOString().slice(0, 10);
+        const isWithinPeriod = tx.transactionDate >= startDate && tx.transactionDate <= endDate;
+        const amount = Number(tx.amount);
+        const type = tx.type;
+
+        if (type === 'CREDIT') {
+          balance += amount;
+        } else if (type === 'PAYBACK') {
+          balance += amount;
+
+          if (isWithinPeriod) {
+            if (!dailyMap[dateKey]) {
+              dailyMap[dateKey] = {
+                date: dateKey,
+                total: 0,
+                billCount: 0,
+                cash: 0,
+                online: 0,
+                credit: 0,
+                totalDiscount: 0,
+                receive: 0,
+                advance: 0,
+                payback: 0,
+                cashInHand: 0,
+              };
+            }
+
+            const isOnline = ['JAZZCASH', 'EASYPAISA', 'BANK_TRANSFER'].includes(
+              tx.paymentMethod?.toUpperCase()
+            );
+
+            if (isOnline) {
+              dailyMap[dateKey].online -= amount;
+            } else {
+              dailyMap[dateKey].payback += amount;
+            }
+            dailyMap[dateKey].total -= amount;
+          }
+        } else if (type === 'PAYMENT') {
+          const balanceBefore = balance;
+          balance -= amount;
+
+          if (isWithinPeriod) {
+            if (!dailyMap[dateKey]) {
+              dailyMap[dateKey] = {
+                date: dateKey,
+                total: 0,
+                billCount: 0,
+                cash: 0,
+                online: 0,
+                credit: 0,
+                totalDiscount: 0,
+                receive: 0,
+                advance: 0,
+                payback: 0,
+                cashInHand: 0,
+              };
+            }
+
+            const isOnline = ['JAZZCASH', 'EASYPAISA', 'BANK_TRANSFER'].includes(
+              tx.paymentMethod?.toUpperCase()
+            );
+
+            let recAmt = 0;
+            let advAmt = 0;
+
+            if (balanceBefore > 0) {
+              recAmt = Math.min(amount, balanceBefore);
+              advAmt = Math.max(0, amount - balanceBefore);
+            } else {
+              recAmt = 0;
+              advAmt = amount;
+            }
+
+            if (isOnline) {
+              dailyMap[dateKey].online += amount;
+            } else {
+              dailyMap[dateKey].receive += recAmt;
+              dailyMap[dateKey].advance += advAmt;
+            }
+            dailyMap[dateKey].total += amount;
+          }
+        }
+      }
     }
 
     // --- Pass 3: compute cashInHand per day ---
     for (const day of Object.values(dailyMap)) {
-      day.cashInHand = day.cash + day.receivablesCollected;
+      day.cashInHand = day.cash + day.receive + day.advance - day.payback;
     }
 
     res.json({

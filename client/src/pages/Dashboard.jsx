@@ -231,7 +231,7 @@ const Dashboard = () => {
           </div>
           <Table
             loading={salesLoading}
-            headers={['Date', 'Bills', 'Cash', 'Online', 'Credit', 'Rcv/Adv', 'Cash in Hand']}
+            headers={['Date', 'Bills', 'Cash', 'Online', 'Credit', 'Receive', 'Advance', 'Payback', 'Cash in Hand']}
             showPagination={false}
             emptyMessage="No sales data for this period"
           >
@@ -243,7 +243,9 @@ const Dashboard = () => {
                   <td className="text-green-400">{formatCurrency(day.cash || 0)}</td>
                   <td className="text-purple-400">{formatCurrency(day.online || 0)}</td>
                   <td className="text-amber-400">{formatCurrency(day.credit || 0)}</td>
-                  <td className="text-sky-400">{formatCurrency(day.receivablesCollected || 0)}</td>
+                  <td className="text-sky-400">{formatCurrency(day.receive || 0)}</td>
+                  <td className="text-indigo-400">{formatCurrency(day.advance || 0)}</td>
+                  <td className="text-red-400">{formatCurrency(day.payback || 0)}</td>
                   <td className="text-emerald-300 font-semibold">{formatCurrency(day.cashInHand || 0)}</td>
                 </tr>
               ))
