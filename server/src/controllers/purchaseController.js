@@ -70,7 +70,11 @@ export const getPurchases = async (req, res, next) => {
         orderBy: { createdAt: 'desc' },
         include: {
           supplier: { select: { id: true, name: true, company: true } },
-          _count: { select: { items: true } },
+          items: {
+            include: {
+              product: { select: { id: true, name: true, sku: true, unit: true } },
+            },
+          },
         },
       }),
       prisma.purchase.count({ where }),

@@ -1716,7 +1716,6 @@ textarea {
 
 .modal-content {
   width: 100%;
-  max-width: 500px;
   background: linear-gradient(135deg, var(--modal-bg-gradient-from), var(--modal-bg-gradient-to));
   border: 1px solid var(--modal-border);
   border-radius: 8px !important;

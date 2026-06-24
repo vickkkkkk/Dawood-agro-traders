@@ -202,6 +202,32 @@ const Purchases = () => {
     setErrors({});
   };
 
+  const handleAddRow = () => {
+    setPurchaseItems(prev => [
+      ...prev,
+      { productId: '', quantity: '', unitPrice: '', batchNo: '', expiryDate: '' }
+    ]);
+  };
+
+  const handleRemoveRow = (idx) => {
+    setPurchaseItems(prev => prev.filter((_, i) => i !== idx));
+    if (errors.items) {
+      setErrors(prev => {
+        const newItems = prev.items ? prev.items.filter((_, i) => i !== idx) : [];
+        return { ...prev, items: newItems };
+      });
+    }
+  };
+
+  const resetSupplierForm = () => {
+    setEditingSupplier(null);
+    setSupName('');
+    setSupPhone('');
+    setSupCompany('');
+    setSupAddress('');
+    setSupErrors({});
+  };
+
   const handlePurchaseSubmit = (e) => {
     e.preventDefault();
     
@@ -405,11 +431,11 @@ const Purchases = () => {
                 </Button>
               </div>
 
-              <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }} className="max-h-[350px] overflow-y-auto pr-1 pt-2">
                 {purchaseItems.map((item, idx) => (
-                  <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-3 p-4 bg-[#161b27]/50 border border-[#2a2f3d] rounded-xl items-end">
+                  <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-5 pb-4 px-4 bg-white/[0.02] border border-white/10 rounded-xl items-end">
                     
-                    <div className="sm:col-span-4">
+                    <div className="sm:col-span-3">
                       <Select
                         id={`pur-prod-${idx}`}
                         label="Product *"
@@ -509,48 +535,56 @@ const Purchases = () => {
           id="supplier-mgmt-modal"
           title="Supplier Management"
           onClose={() => setShowSupplierModal(false)}
+          size="lg"
         >
-          <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
             
             {/* Create/Edit Supplier Form */}
-            <form onSubmit={handleSupplierSubmit} className="space-y-3 p-3 bg-white/5 border border-white/10 rounded-xl">
-              <h4 className="text-sm font-semibold text-white mb-2">
-                {editingSupplier ? 'Edit Supplier Details' : 'Create New Supplier'}
+            <form onSubmit={handleSupplierSubmit} className="md:col-span-5 space-y-4 p-4 bg-white/[0.02] border border-white/5 rounded-xl flex flex-col">
+              <h4 className="text-sm font-bold text-white mb-2">
+                {editingSupplier ? 'Edit Supplier' : 'Create Supplier'}
               </h4>
-              <div className="grid grid-cols-2 gap-2">
-                <Input
-                  id="sup-name"
-                  placeholder="Supplier Name *"
-                  icon={User}
-                  value={supName}
-                  error={supErrors.name}
-                  onChange={(e) => { setSupName(e.target.value); if (supErrors.name) setSupErrors(prev => ({ ...prev, name: null })); }}
-                  required
-                />
-                <Input
-                  id="sup-phone"
-                  placeholder="Phone..."
-                  icon={Phone}
-                  value={supPhone}
-                  error={supErrors.phone}
-                  onChange={(e) => { setSupPhone(e.target.value); if (supErrors.phone) setSupErrors(prev => ({ ...prev, phone: null })); }}
-                />
-              </div>
+              
+              <Input
+                id="sup-name"
+                label="Supplier Name *"
+                placeholder="Enter name..."
+                icon={User}
+                value={supName}
+                error={supErrors.name}
+                onChange={(e) => { setSupName(e.target.value); if (supErrors.name) setSupErrors(prev => ({ ...prev, name: null })); }}
+                required
+              />
+              
+              <Input
+                id="sup-phone"
+                label="Phone"
+                placeholder="Enter phone..."
+                icon={Phone}
+                value={supPhone}
+                error={supErrors.phone}
+                onChange={(e) => { setSupPhone(e.target.value); if (supErrors.phone) setSupErrors(prev => ({ ...prev, phone: null })); }}
+              />
+              
               <Input
                 id="sup-company"
-                placeholder="Company / Shop Name..."
+                label="Company / Shop Name"
+                placeholder="Enter company..."
                 icon={Truck}
                 value={supCompany}
                 onChange={(e) => setSupCompany(e.target.value)}
               />
+              
               <Input
                 id="sup-addr"
-                placeholder="Address..."
+                label="Address"
+                placeholder="Enter address..."
                 icon={MapPin}
                 value={supAddress}
                 onChange={(e) => setSupAddress(e.target.value)}
               />
-              <div className="flex gap-2">
+              
+              <div className="flex gap-2 pt-2 mt-auto">
                 {editingSupplier && (
                   <Button 
                     type="button" 
@@ -569,33 +603,51 @@ const Purchases = () => {
                   loading={createSupplierMutation.isPending || updateSupplierMutation.isPending}
                   className="w-full"
                 >
-                  {editingSupplier ? 'Update Supplier' : 'Add Supplier'}
+                  {editingSupplier ? 'Update' : 'Add'}
                 </Button>
               </div>
             </form>
 
-
             {/* List */}
-            <div className="space-y-2">
-              <h4 className="text-sm font-semibold text-white">Supplier Directory</h4>
-              <div className="divide-y divide-white/5 max-h-56 overflow-y-auto pr-1">
-                {suppliers.map((s) => (
-                  <div key={s.id} className="flex justify-between items-center py-2.5">
-                    <div>
-                      <p className="text-sm font-medium text-white">{s.name}</p>
-                      <p className="text-xs text-slate-500">
-                        {s.company ? `${s.company} | ` : ''}{s.phone || 'No phone'}
-                      </p>
+            <div className="md:col-span-7 space-y-3">
+              <h4 className="text-sm font-bold text-white pb-2 border-b border-white/5 flex items-center gap-2">
+                <Truck size={16} className="text-emerald-400" />
+                Supplier Directory
+              </h4>
+              <div className="divide-y divide-white/5 max-h-[380px] overflow-y-auto pr-1">
+                {suppliers.length > 0 ? (
+                  suppliers.map((s) => (
+                    <div key={s.id} className="flex justify-between items-center py-2.5 hover:bg-white/[0.01] px-2 rounded-lg transition-colors">
+                      <div>
+                        <p className="text-sm font-semibold text-white">{s.name}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {s.company ? `${s.company}` : 'No company'}
+                        </p>
+                        {s.phone && (
+                          <p className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1">
+                            <Phone size={10} />
+                            {s.phone}
+                          </p>
+                        )}
+                        {s.address && (
+                          <p className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1">
+                            <MapPin size={10} />
+                            {s.address}
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        icon={Edit2}
+                        onClick={() => handleEditSupplier(s)}
+                        className="p-2"
+                      />
                     </div>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      icon={Edit2}
-                      onClick={() => handleEditSupplier(s)}
-                      className="p-2"
-                    />
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  <p className="text-center py-8 text-slate-500 text-sm">No suppliers found</p>
+                )}
               </div>
             </div>
 
