@@ -22,6 +22,7 @@ import purchaseRoutes from './routes/purchases.js';
 import reportRoutes from './routes/reports.js';
 import userRoutes from './routes/users.js';
 import cashRoutes from './routes/cash.js';
+import liabilityRoutes from './routes/liabilities.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -83,6 +84,7 @@ app.use('/api', purchaseRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/cash', cashRoutes);
+app.use('/api/liabilities', liabilityRoutes);
 
 // --- Serve Frontend in Production ---
 if (config.nodeEnv === 'production') {

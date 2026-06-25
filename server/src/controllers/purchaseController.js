@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { getBalances } from './cashController.js';
 
 const prisma = new PrismaClient();
 
@@ -75,6 +76,9 @@ export const getPurchases = async (req, res, next) => {
               product: { select: { id: true, name: true, sku: true, unit: true } },
             },
           },
+          liability: {
+            select: { id: true, status: true, remainingBalance: true }
+          }
         },
       }),
       prisma.purchase.count({ where }),
@@ -98,7 +102,19 @@ export const getPurchases = async (req, res, next) => {
 // POST /api/purchases
 export const createPurchase = async (req, res, next) => {
   try {
-    const { supplierId, items, status = 'RECEIVED' } = req.body;
+    const {
+      supplierId,
+      items,
+      status = 'RECEIVED',
+      purchaseOrderRef,
+      paymentMethod = 'CASH',
+      biltyNo,
+      transporterName,
+      transportCost = 0,
+      biltyDate,
+      transportPaymentMethod,
+      dueDate
+    } = req.body;
 
     if (!items || items.length === 0) {
       return res.status(400).json({
@@ -107,8 +123,52 @@ export const createPurchase = async (req, res, next) => {
       });
     }
 
+    const goodsPm = paymentMethod.toUpperCase();
+    const transPm = transportPaymentMethod?.toUpperCase();
+    const tCost = Number(transportCost || 0);
+
+    // Calculate Goods Purchase Total
+    let purchaseTotal = 0;
+    for (const item of items) {
+      purchaseTotal += Number(item.unitPrice) * Number(item.quantity);
+    }
+    const grandTotal = purchaseTotal + tCost;
+
+    // Check overdraft limits
+    let cashNeeded = 0;
+    let bankNeeded = 0;
+
+    if (goodsPm === 'CASH') {
+      cashNeeded += purchaseTotal;
+    } else if (goodsPm === 'BANK') {
+      bankNeeded += purchaseTotal;
+    }
+
+    if (tCost > 0) {
+      if (transPm === 'CASH') {
+        cashNeeded += tCost;
+      } else if (transPm === 'BANK') {
+        bankNeeded += tCost;
+      }
+    }
+
+    if (cashNeeded > 0 || bankNeeded > 0) {
+      const { cashInHand, bankBalance } = await getBalances();
+      if (cashNeeded > cashInHand) {
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient cash in hand. Required: PKR ${cashNeeded.toFixed(2)}, Available: PKR ${cashInHand.toFixed(2)}.`
+        });
+      }
+      if (bankNeeded > bankBalance) {
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient bank balance. Required: PKR ${bankNeeded.toFixed(2)}, Available: PKR ${bankBalance.toFixed(2)}.`
+        });
+      }
+    }
+
     const result = await prisma.$transaction(async (tx) => {
-      let purchaseTotal = 0;
       const purchaseItems = [];
 
       for (const item of items) {
@@ -121,26 +181,28 @@ export const createPurchase = async (req, res, next) => {
         }
 
         const unitPrice = Number(item.unitPrice);
+        const salePrice = Number(item.salePrice || 0);
         const quantity = Number(item.quantity);
         const itemTotal = unitPrice * quantity;
-        purchaseTotal += itemTotal;
 
         purchaseItems.push({
           productId: item.productId,
           quantity,
           unitPrice,
+          salePrice,
           total: itemTotal,
           batchNo: item.batchNo || null,
           expiryDate: item.expiryDate ? new Date(item.expiryDate) : null,
         });
 
-        // Add stock if status is RECEIVED
+        // Update product stock & prices if status is RECEIVED
         if (status === 'RECEIVED') {
           await tx.product.update({
             where: { id: item.productId },
             data: {
               stockQty: { increment: quantity },
-              purchasePrice: unitPrice, // Update purchase price to latest
+              purchasePrice: unitPrice,
+              salePrice: salePrice > 0 ? salePrice : product.salePrice, // Track margin dynamically
               ...(item.batchNo && { batchNo: item.batchNo }),
               ...(item.expiryDate && { expiryDate: new Date(item.expiryDate) }),
             },
@@ -150,14 +212,23 @@ export const createPurchase = async (req, res, next) => {
 
       const grnNo = await generateGrnNo();
 
+      // Create Purchase Record
       const purchase = await tx.purchase.create({
         data: {
           grnNo,
           supplierId: Number(supplierId),
           userId: req.user.id,
           total: purchaseTotal,
+          grandTotal,
           status,
           purchaseDate: new Date(),
+          purchaseOrderRef: purchaseOrderRef || null,
+          paymentMethod: goodsPm,
+          biltyNo: biltyNo || null,
+          transporterName: transporterName || null,
+          transportCost: tCost,
+          biltyDate: biltyDate ? new Date(biltyDate) : null,
+          transportPaymentMethod: transPm || null,
           items: {
             create: purchaseItems,
           },
@@ -167,6 +238,54 @@ export const createPurchase = async (req, res, next) => {
           supplier: true,
         },
       });
+
+      // Synchronize Cash Management
+      // A. Goods Outflow
+      if (goodsPm === 'CASH' || goodsPm === 'BANK') {
+        await tx.cashTransaction.create({
+          data: {
+            type: 'GOODS_PURCHASE',
+            amount: purchaseTotal,
+            paymentMethod: goodsPm,
+            description: `Goods Purchase: GRN #${grnNo} (${purchase.supplier?.name})`
+          }
+        });
+      }
+
+      // B. Transport Outflow
+      if (tCost > 0 && (transPm === 'CASH' || transPm === 'BANK')) {
+        await tx.cashTransaction.create({
+          data: {
+            type: 'TRANSPORT',
+            amount: tCost,
+            paymentMethod: transPm,
+            description: `Transport Cost: GRN #${grnNo} (${transporterName || 'Unspecified'})`
+          }
+        });
+      }
+
+      // C. Supplier Liability Settle
+      let liabilityAmount = 0;
+      if (goodsPm === 'LIABILITY') {
+        liabilityAmount += purchaseTotal;
+      }
+      if (tCost > 0 && transPm === 'LIABILITY') {
+        liabilityAmount += tCost;
+      }
+
+      if (liabilityAmount > 0) {
+        await tx.liability.create({
+          data: {
+            grnNo,
+            purchaseId: purchase.id,
+            supplierId: Number(supplierId),
+            totalAmount: liabilityAmount,
+            remainingBalance: liabilityAmount,
+            status: 'UNPAID',
+            dueDate: dueDate ? new Date(dueDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+          }
+        });
+      }
 
       return purchase;
     });

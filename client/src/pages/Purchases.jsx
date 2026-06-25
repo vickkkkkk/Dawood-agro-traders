@@ -4,7 +4,7 @@ import { toast } from 'react-hot-toast';
 import { 
   Search, Plus, Eye, Truck, RefreshCw, 
   Trash2, Edit2, ShoppingBag, PlusCircle, Package, Layers, DollarSign, Hash, Calendar,
-  User, Phone, MapPin
+  User, Phone, MapPin, ClipboardList, ShieldAlert, CreditCard
 } from 'lucide-react';
 import { 
   getPurchases, createPurchase, getPurchaseById,
@@ -31,16 +31,31 @@ const Purchases = () => {
 
   // Modals state
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedPurchase, setSelectedPurchase] = useState(null);
 
-  // New Purchase Form State & Validation
+  // New Purchase Form State
   const [selectedSupplierId, setSelectedSupplierId] = useState('');
-  const [purchaseItems, setPurchaseItems] = useState([{ productId: '', quantity: '', unitPrice: '', batchNo: '', expiryDate: '' }]);
+  const [purchaseOrderRef, setPurchaseOrderRef] = useState('');
+  const [purchaseItems, setPurchaseItems] = useState([{ productId: '', quantity: '', unitPrice: '', salePrice: '', batchNo: '', expiryDate: '' }]);
+  
+  // Logistics / Transport State
+  const [biltyNo, setBiltyNo] = useState('');
+  const [transporterName, setTransporterName] = useState('');
+  const [transportCost, setTransportCost] = useState('');
+  const [biltyDate, setBiltyDate] = useState(new Date().toISOString().split('T')[0]);
+  const [transportPaymentMethod, setTransportPaymentMethod] = useState('CASH');
+
+  // Goods Payment Selector Modal State
+  const [goodsPaymentMethod, setGoodsPaymentMethod] = useState('CASH');
+  const [dueDate, setDueDate] = useState(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+  const [pendingPayload, setPendingPayload] = useState(null);
+
   const [errors, setErrors] = useState({});
 
-  // Supplier Form State & Validation
+  // Supplier Form State
   const [editingSupplier, setEditingSupplier] = useState(null);
   const [supName, setSupName] = useState('');
   const [supPhone, setSupPhone] = useState('');
@@ -72,16 +87,20 @@ const Purchases = () => {
   // Mutations
   const createPurchaseMutation = useMutation({
     mutationFn: createPurchase,
-    onSuccess: () => {
-      toast.success('Purchase GRN recorded! Stock levels updated.');
+    onSuccess: (res) => {
+      toast.success(res?.message || 'Purchase GRN recorded! Stock levels updated.');
       queryClient.invalidateQueries(['purchases']);
       queryClient.invalidateQueries(['products']);
+      queryClient.invalidateQueries(['cash-summary']);
+      queryClient.invalidateQueries(['cash-ledger']);
+      queryClient.invalidateQueries(['liabilities']);
       queryClient.invalidateQueries(['dashboard']);
+      setShowPaymentModal(false);
       setShowPurchaseModal(false);
       resetPurchaseForm();
     },
     onError: (err) => {
-      toast.error(err?.response?.data?.message || 'Failed to record purchase');
+      toast.error(err?.response?.data?.message || 'Failed to record purchase. Verify cash limits.');
     }
   });
 
@@ -148,11 +167,12 @@ const Purchases = () => {
       if (i !== idx) return item;
       const updated = { ...item, [field]: val };
       
-      // Auto fill price from product sale/purchase price if product changes
+      // Auto fill prices if product changes
       if (field === 'productId') {
         const prod = products.find(p => p.id === parseInt(val));
         if (prod) {
           updated.unitPrice = prod.purchasePrice;
+          updated.salePrice = prod.salePrice;
         }
       }
       return updated;
@@ -193,19 +213,37 @@ const Purchases = () => {
         delete errs.items[idx].unitPrice;
       }
     }
+    if (field === 'salePrice') {
+      if (!val) {
+        errs.items[idx].salePrice = 'Required';
+      } else if (parseFloat(val) <= 0) {
+        errs.items[idx].salePrice = 'Must be > 0';
+      } else {
+        delete errs.items[idx].salePrice;
+      }
+    }
     setErrors(errs);
   };
 
   const resetPurchaseForm = () => {
     setSelectedSupplierId('');
-    setPurchaseItems([{ productId: '', quantity: '', unitPrice: '', batchNo: '', expiryDate: '' }]);
+    setPurchaseOrderRef('');
+    setPurchaseItems([{ productId: '', quantity: '', unitPrice: '', salePrice: '', batchNo: '', expiryDate: '' }]);
+    setBiltyNo('');
+    setTransporterName('');
+    setTransportCost('');
+    setBiltyDate(new Date().toISOString().split('T')[0]);
+    setTransportPaymentMethod('CASH');
+    setGoodsPaymentMethod('CASH');
+    setDueDate(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+    setPendingPayload(null);
     setErrors({});
   };
 
   const handleAddRow = () => {
     setPurchaseItems(prev => [
       ...prev,
-      { productId: '', quantity: '', unitPrice: '', batchNo: '', expiryDate: '' }
+      { productId: '', quantity: '', unitPrice: '', salePrice: '', batchNo: '', expiryDate: '' }
     ]);
   };
 
@@ -228,7 +266,8 @@ const Purchases = () => {
     setSupErrors({});
   };
 
-  const handlePurchaseSubmit = (e) => {
+  // Triggers Payment Method Modal
+  const handlePurchasePreSubmit = (e) => {
     e.preventDefault();
     
     let hasError = false;
@@ -259,6 +298,13 @@ const Purchases = () => {
         rowErr.unitPrice = 'Must be > 0';
         hasError = true;
       }
+      if (!item.salePrice) {
+        rowErr.salePrice = 'Sale Price is required';
+        hasError = true;
+      } else if (parseFloat(item.salePrice) <= 0) {
+        rowErr.salePrice = 'Must be > 0';
+        hasError = true;
+      }
       errs.items[idx] = rowErr;
     });
 
@@ -272,13 +318,34 @@ const Purchases = () => {
 
     const payload = {
       supplierId: parseInt(selectedSupplierId),
+      purchaseOrderRef: purchaseOrderRef || null,
+      biltyNo: biltyNo || null,
+      transporterName: transporterName || null,
+      transportCost: parseFloat(transportCost) || 0,
+      biltyDate: biltyNo ? new Date(biltyDate).toISOString() : null,
+      transportPaymentMethod: parseFloat(transportCost) > 0 ? transportPaymentMethod : null,
       items: purchaseItems.map(item => ({
         productId: parseInt(item.productId),
         quantity: parseFloat(item.quantity),
         unitPrice: parseFloat(item.unitPrice),
+        salePrice: parseFloat(item.salePrice),
         batchNo: item.batchNo || null,
         expiryDate: item.expiryDate ? new Date(item.expiryDate).toISOString() : null
       }))
+    };
+
+    setPendingPayload(payload);
+    setShowPaymentModal(true);
+  };
+
+  // Finalizes the purchase creation
+  const handleFinalConfirm = () => {
+    if (!pendingPayload) return;
+
+    const payload = {
+      ...pendingPayload,
+      paymentMethod: goodsPaymentMethod,
+      dueDate: goodsPaymentMethod === 'LIABILITY' ? new Date(dueDate).toISOString() : null
     };
 
     createPurchaseMutation.mutate(payload);
@@ -333,46 +400,60 @@ const Purchases = () => {
         <Table
           id="purchases-table"
           loading={purchasesLoading || purchasesFetching}
-          headers={['GRN Number', 'Date', 'Supplier', 'Items Qty', 'Total Bill', 'Status', 'Actions']}
+          headers={['GRN Number', 'Date', 'Supplier', 'Items Qty', 'Grand Total', 'Method', 'Liability status', 'Actions']}
           showPagination={false}
         >
           {purchases.length > 0 ? (
-            purchases.map((pur) => (
-              <tr key={pur.id} className="border-b border-white/5 hover:bg-white/[0.03] transition-colors">
-                <td className="px-4 py-3">
-                  <span className="font-mono text-sm text-emerald-400 font-semibold">{pur.grnNo}</span>
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-300">
-                  {formatDateTime(pur.purchaseDate)}
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-300">
-                  {pur.supplier?.name} {pur.supplier?.company ? `(${pur.supplier.company})` : ''}
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-400">
-                  {pur.items?.length || 0} items
-                </td>
-                <td className="px-4 py-3 text-sm font-bold text-white">
-                  {formatCurrency(pur.total)}
-                </td>
-                <td className="px-4 py-3 text-xs">
-                  <Badge variant="success">RECEIVED</Badge>
-                </td>
-                <td className="px-4 py-3">
-                  <Button
-                    id={`btn-view-pur-${pur.grnNo}`}
-                    variant="secondary"
-                    size="sm"
-                    icon={Eye}
-                    onClick={() => { setSelectedPurchase(pur); setShowViewModal(true); }}
-                  >
-                    Details
-                  </Button>
-                </td>
-              </tr>
-            ))
+            purchases.map((pur) => {
+              const hasLiability = pur.liability;
+              return (
+                <tr key={pur.id} className="border-b border-white/5 hover:bg-white/[0.03] transition-colors">
+                  <td className="px-4 py-3">
+                    <span className="font-mono text-sm text-emerald-400 font-semibold">{pur.grnNo}</span>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-300">
+                    {formatDateTime(pur.purchaseDate)}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-300">
+                    {pur.supplier?.name} {pur.supplier?.company ? `(${pur.supplier.company})` : ''}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-400">
+                    {pur.items?.length || 0} items
+                  </td>
+                  <td className="px-4 py-3 text-sm font-bold text-white">
+                    {formatCurrency(pur.grandTotal || pur.total)}
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    <Badge variant={pur.paymentMethod === 'LIABILITY' ? 'warning' : 'success'}>
+                      {pur.paymentMethod}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    {hasLiability ? (
+                      <Badge variant={pur.liability.status === 'PAID' ? 'success' : 'danger'}>
+                        {pur.liability.status}
+                      </Badge>
+                    ) : (
+                      <span className="text-slate-500 text-xs">-</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Button
+                      id={`btn-view-pur-${pur.grnNo}`}
+                      variant="secondary"
+                      size="sm"
+                      icon={Eye}
+                      onClick={() => { setSelectedPurchase(pur); setShowViewModal(true); }}
+                    >
+                      Details
+                    </Button>
+                  </td>
+                </tr>
+              );
+            })
           ) : (
             <tr>
-              <td colSpan={7} className="px-7 py-16 text-center text-slate-500">
+              <td colSpan={8} className="px-7 py-16 text-center text-slate-500">
                 No purchases found
               </td>
             </tr>
@@ -381,7 +462,7 @@ const Purchases = () => {
         </div>
       </Card>
 
-      {/* Record Purchase Modal */}
+      {/* Record Purchase Modal (GRN Form) */}
       {showPurchaseModal && (
         <Modal
           id="new-purchase-modal"
@@ -395,31 +476,91 @@ const Purchases = () => {
                 type="submit" 
                 variant="primary"
                 form="purchase-form"
-                loading={createPurchaseMutation.isPending}
               >
-                Confirm Goods Received
+                Proceed to Payment
               </Button>
             </>
           }
         >
-          <form id="purchase-form" onSubmit={handlePurchaseSubmit} className="space-y-6">
+          <form id="purchase-form" onSubmit={handlePurchasePreSubmit} className="space-y-6">
             
-            {/* Supplier Select */}
-            <Select
-              id="pur-supplier-select"
-              label="Supplier *"
-              required
-              icon={Truck}
-              options={suppliers.map(s => ({ value: s.id, label: `${s.name} ${s.company ? `(${s.company})` : ''}` }))}
-              value={selectedSupplierId}
-              error={errors.supplierId}
-              onChange={(e) => { setSelectedSupplierId(e.target.value); if (errors.supplierId) setErrors(prev => ({ ...prev, supplierId: null })); }}
-            />
+            {/* Header Fields */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Select
+                id="pur-supplier-select"
+                label="Supplier Name *"
+                required
+                icon={Truck}
+                options={suppliers.map(s => ({ value: s.id, label: `${s.name} ${s.company ? `(${s.company})` : ''}` }))}
+                value={selectedSupplierId}
+                error={errors.supplierId}
+                onChange={(e) => { setSelectedSupplierId(e.target.value); if (errors.supplierId) setErrors(prev => ({ ...prev, supplierId: null })); }}
+              />
+
+              <Input
+                id="pur-order-ref"
+                label="Purchase Order Ref (Optional)"
+                placeholder="e.g. PO-5412..."
+                icon={ClipboardList}
+                value={purchaseOrderRef}
+                onChange={(e) => setPurchaseOrderRef(e.target.value)}
+              />
+            </div>
+
+            {/* Logistics & Transport cost */}
+            <div className="p-4 bg-white/[0.02] border border-white/5 rounded-xl space-y-4">
+              <h4 className="text-[13px] font-bold text-white flex items-center gap-2">
+                <Truck size={14} className="text-emerald-400" />
+                Logistics & Transport details
+              </h4>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+                <Input
+                  id="pur-bilty-no"
+                  label="Bilty Number"
+                  placeholder="e.g. B-8798"
+                  value={biltyNo}
+                  onChange={(e) => setBiltyNo(e.target.value)}
+                />
+                <Input
+                  id="pur-transporter"
+                  label="Transporter Name"
+                  placeholder="e.g. Shalimar Cargo"
+                  value={transporterName}
+                  onChange={(e) => setTransporterName(e.target.value)}
+                />
+                <Input
+                  id="pur-transport-cost"
+                  label="Transport Cost (PKR)"
+                  type="number"
+                  placeholder="0.00"
+                  value={transportCost}
+                  onChange={(e) => setTransportCost(e.target.value)}
+                />
+                <DatePicker
+                  id="pur-bilty-date"
+                  label="Bilty Date"
+                  value={biltyDate}
+                  onChange={(e) => setBiltyDate(e.target.value)}
+                />
+                <Select
+                  id="pur-transport-method"
+                  label="Payment Method"
+                  options={[
+                    { value: 'CASH', label: 'Cash in Hand' },
+                    { value: 'BANK', label: 'Bank Account' },
+                    { value: 'LIABILITY', label: 'Supplier Liability' }
+                  ]}
+                  value={transportPaymentMethod}
+                  onChange={(e) => setTransportPaymentMethod(e.target.value)}
+                />
+              </div>
+            </div>
 
             {/* Items Rows */}
             <div className="space-y-4">
               <div className="flex justify-between items-center pb-3 border-b border-[#1e2330]">
-                <h4 className="text-[15px] font-bold text-white">Purchase Items</h4>
+                <h4 className="text-[14px] font-bold text-white">GRN Item Table</h4>
                 <Button 
                   type="button" 
                   variant="secondary" 
@@ -431,9 +572,9 @@ const Purchases = () => {
                 </Button>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }} className="max-h-[350px] overflow-y-auto pr-1 pt-2">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }} className="max-h-[350px] overflow-y-auto pr-1 pt-1">
                 {purchaseItems.map((item, idx) => (
-                  <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-5 pb-4 px-4 bg-white/[0.02] border border-white/10 rounded-xl items-end">
+                  <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-4 pb-3 px-4 bg-white/[0.01] border border-white/5 rounded-xl items-end">
                     
                     <div className="sm:col-span-3">
                       <Select
@@ -451,10 +592,10 @@ const Purchases = () => {
                     <div className="sm:col-span-2">
                       <Input
                         id={`pur-qty-${idx}`}
-                        label="Qty *"
+                        label="Quantity *"
                         type="number"
                         required
-                        min="1"
+                        min="0.01"
                         icon={Layers}
                         placeholder="0"
                         value={item.quantity}
@@ -466,10 +607,10 @@ const Purchases = () => {
                     <div className="sm:col-span-2">
                       <Input
                         id={`pur-price-${idx}`}
-                        label="Cost *"
+                        label="Cost Price *"
                         type="number"
                         required
-                        min="1"
+                        min="0.01"
                         placeholder="0"
                         icon={DollarSign}
                         value={item.unitPrice}
@@ -480,23 +621,38 @@ const Purchases = () => {
 
                     <div className="sm:col-span-2">
                       <Input
-                        id={`pur-batch-${idx}`}
-                        label="Batch"
-                        icon={Hash}
-                        placeholder="Batch..."
-                        value={item.batchNo}
-                        onChange={(e) => handleRowChange(idx, 'batchNo', e.target.value)}
+                        id={`pur-sale-${idx}`}
+                        label="Sale Price *"
+                        type="number"
+                        required
+                        min="0.01"
+                        placeholder="0"
+                        icon={DollarSign}
+                        value={item.salePrice}
+                        error={errors.items?.[idx]?.salePrice}
+                        onChange={(e) => handleRowChange(idx, 'salePrice', e.target.value)}
                       />
                     </div>
 
-                    <div className="sm:col-span-2">
-                      <DatePicker
-                        id={`pur-expiry-${idx}`}
-                        label="Expiry"
-                        value={item.expiryDate}
-                        onChange={(e) => handleRowChange(idx, 'expiryDate', e.target.value)}
-                        className="!text-[11px]"
-                      />
+                    <div className="sm:col-span-2 flex gap-2">
+                      <div className="flex-1">
+                        <Input
+                          id={`pur-batch-${idx}`}
+                          label="Batch"
+                          placeholder="Batch..."
+                          value={item.batchNo}
+                          onChange={(e) => handleRowChange(idx, 'batchNo', e.target.value)}
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <DatePicker
+                          id={`pur-expiry-${idx}`}
+                          label="Expiry"
+                          value={item.expiryDate}
+                          onChange={(e) => handleRowChange(idx, 'expiryDate', e.target.value)}
+                          className="!text-[10px]"
+                        />
+                      </div>
                     </div>
 
                     <div className="sm:col-span-1 flex justify-center pb-1">
@@ -519,13 +675,94 @@ const Purchases = () => {
             {/* Calculations Footer */}
             <div className="flex justify-between items-center border-t border-white/10 pt-4">
               <div className="text-sm text-slate-400">
-                Total purchase cost:
+                Goods Cost Total:
               </div>
               <div className="text-xl font-bold text-emerald-400">
                 {formatCurrency(calculatePurchaseTotal())}
               </div>
             </div>
           </form>
+        </Modal>
+      )}
+
+      {/* Select Payment Method Modal */}
+      {showPaymentModal && pendingPayload && (
+        <Modal
+          id="confirm-payment-modal"
+          title="Select GRN Payment Method"
+          onClose={() => setShowPaymentModal(false)}
+          size="md"
+          footer={
+            <>
+              <Button type="button" variant="secondary" onClick={() => setShowPaymentModal(false)}>Back</Button>
+              <Button 
+                type="button" 
+                variant="primary"
+                onClick={handleFinalConfirm}
+                loading={createPurchaseMutation.isPending}
+              >
+                Finalize & Post GRN
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-5">
+            {/* Bill Summary */}
+            <div className="p-4 bg-slate-900/50 border border-white/5 rounded-xl space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Goods Purchase Total:</span>
+                <span className="text-white font-semibold">{formatCurrency(calculatePurchaseTotal())}</span>
+              </div>
+              {pendingPayload.transportCost > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Transport Cost ({pendingPayload.transportPaymentMethod}):</span>
+                  <span className="text-white font-semibold">{formatCurrency(pendingPayload.transportCost)}</span>
+                </div>
+              )}
+              <div className="flex justify-between pt-2 border-t border-white/5 font-extrabold">
+                <span className="text-white">Grand Total:</span>
+                <span className="text-emerald-400 text-lg">
+                  {formatCurrency(calculatePurchaseTotal() + pendingPayload.transportCost)}
+                </span>
+              </div>
+            </div>
+
+            {/* Payment Method Selector */}
+            <div className="space-y-3">
+              <Select
+                id="pur-payment-method"
+                label="Goods Purchase Payment Method *"
+                options={[
+                  { value: 'CASH', label: '💵 Cash in Hand' },
+                  { value: 'BANK', label: '🏦 Bank Account' },
+                  { value: 'LIABILITY', label: '📋 Supplier Liability (Credit)' }
+                ]}
+                value={goodsPaymentMethod}
+                onChange={(e) => setGoodsPaymentMethod(e.target.value)}
+              />
+
+              {goodsPaymentMethod === 'LIABILITY' && (
+                <DatePicker
+                  id="pur-due-date"
+                  label="Liability Due Date *"
+                  required
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                />
+              )}
+            </div>
+
+            {/* Accounting Note */}
+            <div className="p-3 bg-white/5 border border-white/5 rounded-xl text-[11px] text-slate-400 flex gap-2 items-start">
+              <ShieldAlert size={14} className="text-amber-400 flex-shrink-0 mt-0.5" />
+              <p>
+                {goodsPaymentMethod === 'CASH' && "Deducts the purchase cost immediately from Cash in Hand store balance."}
+                {goodsPaymentMethod === 'BANK' && "Deducts the purchase cost immediately from Bank Account balance."}
+                {goodsPaymentMethod === 'LIABILITY' && `Creates a liability log linked to this GRN. Total unpaid balance will be Rs. ${calculatePurchaseTotal().toLocaleString()}.`}
+              </p>
+            </div>
+
+          </div>
         </Modal>
       )}
 
@@ -661,43 +898,123 @@ const Purchases = () => {
           id="view-purchase-modal"
           title={`GRN Details: ${selectedPurchase.grnNo}`}
           onClose={() => setShowViewModal(false)}
+          size="lg"
         >
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4 pb-4 border-b border-white/5 text-sm">
-              <div>
-                <p className="text-slate-500">Supplier</p>
-                <p className="font-semibold text-white">{selectedPurchase.supplier?.name}</p>
-                {selectedPurchase.supplier?.company && <p className="text-slate-400 text-xs">{selectedPurchase.supplier.company}</p>}
+          <div className="space-y-6">
+            
+            {/* Header cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="p-4 bg-white/[0.02] border border-white/5 rounded-xl">
+                <span className="text-slate-500 text-xs">Supplier Info</span>
+                <p className="font-bold text-sm text-white mt-1">{selectedPurchase.supplier?.name}</p>
+                {selectedPurchase.supplier?.company && <p className="text-slate-400 text-xs mt-0.5">{selectedPurchase.supplier.company}</p>}
               </div>
-              <div className="text-right">
-                <p className="text-slate-500">Received Date</p>
-                <p className="font-semibold text-white">{formatDate(selectedPurchase.purchaseDate)}</p>
+              <div className="p-4 bg-white/[0.02] border border-white/5 rounded-xl">
+                <span className="text-slate-500 text-xs">GRN Details</span>
+                <p className="font-mono text-xs text-emerald-400 font-bold mt-1">Ref: {selectedPurchase.purchaseOrderRef || 'None'}</p>
+                <p className="text-slate-400 text-xs mt-0.5">Date: {formatDate(selectedPurchase.purchaseDate)}</p>
+              </div>
+              <div className="p-4 bg-white/[0.02] border border-white/5 rounded-xl">
+                <span className="text-slate-500 text-xs">Payment Information</span>
+                <div className="mt-1 flex items-center gap-2">
+                  <Badge variant={selectedPurchase.paymentMethod === 'LIABILITY' ? 'warning' : 'success'}>
+                    {selectedPurchase.paymentMethod}
+                  </Badge>
+                  {selectedPurchase.liability && (
+                    <Badge variant={selectedPurchase.liability.status === 'PAID' ? 'success' : 'danger'}>
+                      Liability: {selectedPurchase.liability.status}
+                    </Badge>
+                  )}
+                </div>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Item Details</p>
-              <div className="divide-y divide-white/5">
-                {selectedPurchase.items?.map((item, idx) => (
-                  <div key={idx} className="flex justify-between items-center py-2 text-sm">
-                    <div>
-                      <p className="font-semibold text-white">{item.product?.name || `Product #${item.productId}`}</p>
-                      <p className="text-xs text-slate-500">
-                        Cost: {formatCurrency(item.unitPrice)} | Qty: {item.quantity} {item.product?.unit || 'bags'}
-                        {item.batchNo && ` | Batch: ${item.batchNo}`}
-                      </p>
-                    </div>
-                    <div className="font-bold text-white">
-                      {formatCurrency(parseFloat(item.quantity) * parseFloat(item.unitPrice))}
-                    </div>
+            {/* Bilty Details */}
+            {selectedPurchase.biltyNo && (
+              <div className="p-4 bg-white/[0.02] border border-white/5 rounded-xl space-y-2 text-xs">
+                <h4 className="font-bold text-white text-[13px] flex items-center gap-1.5 border-b border-white/5 pb-1">
+                  <Truck size={14} className="text-emerald-400" />
+                  Bilty / Transporter Information
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-1">
+                  <div>
+                    <span className="text-slate-500">Bilty Number:</span>
+                    <p className="font-semibold text-white mt-0.5">{selectedPurchase.biltyNo}</p>
                   </div>
-                ))}
+                  <div>
+                    <span className="text-slate-500">Transporter:</span>
+                    <p className="font-semibold text-white mt-0.5">{selectedPurchase.transporterName || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Transport Cost:</span>
+                    <p className="font-semibold text-white mt-0.5">{formatCurrency(selectedPurchase.transportCost)} ({selectedPurchase.transportPaymentMethod})</p>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Bilty Date:</span>
+                    <p className="font-semibold text-white mt-0.5">{selectedPurchase.biltyDate ? formatDate(selectedPurchase.biltyDate) : '-'}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Items Table */}
+            <div className="space-y-2">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Item Details</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-white/5 text-slate-400 uppercase tracking-wider font-semibold">
+                      <th className="py-2">Item Name</th>
+                      <th className="py-2 text-right">Qty</th>
+                      <th className="py-2 text-right">Cost Price</th>
+                      <th className="py-2 text-right">Sale Price</th>
+                      <th className="py-2 text-right">Total Price</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {selectedPurchase.items?.map((item, idx) => (
+                      <tr key={idx} className="hover:bg-white/[0.01]">
+                        <td className="py-2.5 font-medium text-white">
+                          {item.product?.name || `Product #${item.productId}`}
+                          {item.batchNo && <span className="block text-[10px] text-slate-500">Batch: {item.batchNo} {item.expiryDate && `| Expiry: ${formatDate(item.expiryDate)}`}</span>}
+                        </td>
+                        <td className="py-2.5 text-right text-slate-300">
+                          {item.quantity} {item.product?.unit || 'bags'}
+                        </td>
+                        <td className="py-2.5 text-right text-slate-300">
+                          {formatCurrency(item.unitPrice)}
+                        </td>
+                        <td className="py-2.5 text-right text-emerald-400">
+                          {formatCurrency(item.salePrice || 0)}
+                        </td>
+                        <td className="py-2.5 text-right font-semibold text-white">
+                          {formatCurrency(parseFloat(item.quantity) * parseFloat(item.unitPrice))}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
 
-            <div className="flex justify-between items-center pt-4 border-t border-white/5 font-bold">
-              <span className="text-white">Total Amount:</span>
-              <span className="text-emerald-400 text-lg">{formatCurrency(selectedPurchase.total)}</span>
+            {/* Summary details */}
+            <div className="pt-4 border-t border-white/5 space-y-2 text-sm">
+              <div className="flex justify-between text-xs text-slate-400">
+                <span>Goods total:</span>
+                <span>{formatCurrency(selectedPurchase.total)}</span>
+              </div>
+              {selectedPurchase.transportCost > 0 && (
+                <div className="flex justify-between text-xs text-slate-400">
+                  <span>Transport cost:</span>
+                  <span>{formatCurrency(selectedPurchase.transportCost)}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center pt-2 border-t border-white/5 font-extrabold text-white text-base">
+                <span>Grand Total:</span>
+                <span className="text-emerald-400 text-lg">
+                  {formatCurrency(selectedPurchase.grandTotal || selectedPurchase.total)}
+                </span>
+              </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-2">

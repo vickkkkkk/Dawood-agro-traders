@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 /**
  * Helper to calculate current cash in hand and bank balances
  */
-const getBalances = async () => {
+export const getBalances = async () => {
   // 1. Query POS Cash sales (non-void, cash or credit, where amountPaid > 0)
   const bills = await prisma.bill.findMany({
     where: { isVoid: false },
@@ -101,6 +101,19 @@ const getBalances = async () => {
     }
   }
 
+  // 4. Query Liabilities
+  const liabilitiesAgg = await prisma.liability.aggregate({
+    _sum: {
+      totalAmount: true,
+      paidAmount: true,
+      remainingBalance: true
+    }
+  });
+
+  const totalLiabilities = liabilitiesAgg._sum.totalAmount || 0;
+  const totalPaid = liabilitiesAgg._sum.paidAmount || 0;
+  const totalRemaining = liabilitiesAgg._sum.remainingBalance || 0;
+
   const cashInHand = posCashInflow + creditCashInflow - creditCashOutflow + manualInflow - manualOutflow - bankTransfers;
   const bankBalance = posOnlineInflow + creditOnlineInflow - creditOnlineOutflow + bankTransfers + manualBankInflow - manualBankOutflow;
   const totalOut = creditCashOutflow + manualOutflow + manualBankOutflow;
@@ -112,6 +125,9 @@ const getBalances = async () => {
     totalInflows: posCashInflow + creditCashInflow + manualInflow + manualBankInflow,
     totalOutflows: totalOut,
     totalBankTransferred,
+    totalLiabilities,
+    totalPaidLiabilities: totalPaid,
+    totalRemainingLiabilities: totalRemaining
   };
 };
 
@@ -134,27 +150,30 @@ export const getCashLedger = async (req, res, next) => {
     const { page = 1, limit = 20, search = '' } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
-    // Fetch POS Cash Inflows
+    // Fetch POS Cash & Online sales
     const bills = await prisma.bill.findMany({
       where: {
         isVoid: false,
-        amountPaid: { gt: 0 },
-        paymentMethod: { in: ['CASH', 'CREDIT'] }
+        amountPaid: { gt: 0 }
       },
       include: {
         customer: { select: { name: true } }
       }
     });
 
-    const billItems = bills.map(b => ({
-      id: `bill-${b.id}`,
-      date: b.billDate,
-      type: 'SALE',
-      category: 'Inflow',
-      amount: b.amountPaid,
-      description: `POS Sale - Bill #${b.billNo}${b.customer ? ` (Customer: ${b.customer.name})` : ''}`,
-      details: { billNo: b.billNo }
-    }));
+    const billItems = bills.map(b => {
+      const isOnline = ['JAZZCASH', 'EASYPAISA', 'BANK_TRANSFER'].includes(b.paymentMethod?.toUpperCase());
+      return {
+        id: `bill-${b.id}`,
+        date: b.billDate,
+        type: 'SALE',
+        category: 'Inflow',
+        amount: b.amountPaid,
+        description: `POS Sale - Bill #${b.billNo}${b.customer ? ` (Customer: ${b.customer.name})` : ''}`,
+        paymentMethod: isOnline ? 'BANK' : 'CASH',
+        details: { billNo: b.billNo }
+      };
+    });
 
     // Fetch credit recoveries/refunds
     const creditTxs = await prisma.creditTransaction.findMany({
@@ -167,12 +186,10 @@ export const getCashLedger = async (req, res, next) => {
       }
     });
 
-    const cashCreditTxs = creditTxs.filter(tx => {
+    const creditItems = creditTxs.map(tx => {
       const isOnline = ['JAZZCASH', 'EASYPAISA', 'BANK_TRANSFER'].includes(tx.paymentMethod?.toUpperCase());
-      return !isOnline;
-    });
+      const methodLabel = isOnline ? 'BANK' : 'CASH';
 
-    const creditItems = cashCreditTxs.map(tx => {
       if (tx.type === 'PAYMENT') {
         return {
           id: `credit-${tx.id}`,
@@ -181,6 +198,7 @@ export const getCashLedger = async (req, res, next) => {
           category: 'Inflow',
           amount: tx.amount,
           description: `Udhar Recovery - Customer: ${tx.customer?.name}${tx.bill ? ` (Bill: ${tx.bill.billNo})` : ''}`,
+          paymentMethod: methodLabel,
           details: { description: tx.description }
         };
       } else {
@@ -191,12 +209,13 @@ export const getCashLedger = async (req, res, next) => {
           category: 'Outflow',
           amount: tx.amount,
           description: `Advance Refund - Customer: ${tx.customer?.name}`,
+          paymentMethod: methodLabel,
           details: { description: tx.description }
         };
       }
     });
 
-    // Custom cash transactions
+    // Custom cash/bank transactions
     const cashTxs = await prisma.cashTransaction.findMany({});
 
     const cashItems = cashTxs.map(tx => {
@@ -231,6 +250,7 @@ export const getCashLedger = async (req, res, next) => {
         category,
         amount: tx.amount,
         description: desc,
+        paymentMethod: tx.paymentMethod?.toUpperCase() === 'BANK' ? 'BANK' : 'CASH',
         details: {
           partyName: tx.partyName,
           liabilityName: tx.liabilityName,

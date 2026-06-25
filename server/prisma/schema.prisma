@@ -65,6 +65,7 @@ model Supplier {
   createdAt DateTime @default(now())
 
   purchases Purchase[]
+  liabilities Liability[]
 
   @@map("suppliers")
 }
@@ -126,17 +127,28 @@ model BillItem {
 }
 
 model Purchase {
-  id           Int            @id @default(autoincrement())
-  grnNo        String         @unique
-  supplierId   Int
-  userId       Int
-  total        Float
-  status       String         @default("RECEIVED") // RECEIVED, PENDING
-  purchaseDate DateTime       @default(now())
-  createdAt    DateTime       @default(now())
+  id                     Int            @id @default(autoincrement())
+  grnNo                  String         @unique
+  supplierId             Int
+  userId                 Int
+  total                  Float          // Items total cost
+  status                 String         @default("RECEIVED") // RECEIVED, PENDING
+  purchaseDate           DateTime       @default(now())
+  createdAt              DateTime       @default(now())
 
-  supplier Supplier       @relation(fields: [supplierId], references: [id])
-  items    PurchaseItem[]
+  // New GRN & Logistics fields
+  purchaseOrderRef       String?
+  grandTotal             Float          @default(0)
+  paymentMethod          String         @default("CASH") // CASH, BANK, LIABILITY
+  biltyNo                String?
+  transporterName        String?
+  transportCost          Float          @default(0)
+  biltyDate              DateTime?
+  transportPaymentMethod String?        // CASH, BANK, LIABILITY
+
+  supplier               Supplier       @relation(fields: [supplierId], references: [id])
+  items                  PurchaseItem[]
+  liability              Liability?
 
   @@map("purchases")
 }
@@ -146,15 +158,50 @@ model PurchaseItem {
   purchaseId Int
   productId  Int
   quantity   Float
-  unitPrice  Float
+  unitPrice  Float     // Cost price
   total      Float
+  salePrice  Float     @default(0) // Selling price (for margin tracking)
   batchNo    String?
   expiryDate DateTime?
 
-  purchase Purchase @relation(fields: [purchaseId], references: [id])
-  product  Product  @relation(fields: [productId], references: [id])
+  purchase   Purchase  @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  product    Product   @relation(fields: [productId], references: [id])
 
   @@map("purchase_items")
+}
+
+model Liability {
+  id               Int                @id @default(autoincrement())
+  grnNo            String             @unique
+  purchaseId       Int                @unique
+  supplierId       Int
+  totalAmount      Float
+  paidAmount       Float              @default(0)
+  remainingBalance Float              @default(0)
+  dueDate          DateTime?
+  status           String             @default("UNPAID") // UNPAID, PARTIAL, PAID
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  purchase         Purchase           @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  supplier         Supplier           @relation(fields: [supplierId], references: [id])
+  payments         LiabilityPayment[]
+
+  @@map("liabilities")
+}
+
+model LiabilityPayment {
+  id            Int        @id @default(autoincrement())
+  liabilityId   Int
+  amount        Float
+  paymentMethod String     // CASH, BANK
+  paymentDate   DateTime   @default(now())
+  description   String?
+  createdAt     DateTime   @default(now())
+
+  liability     Liability  @relation(fields: [liabilityId], references: [id], onDelete: Cascade)
+
+  @@map("liability_payments")
 }
 
 model CreditTransaction {
