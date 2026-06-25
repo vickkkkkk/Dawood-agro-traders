@@ -246,7 +246,7 @@ const Dashboard = () => {
                   <td className="text-sky-400">{formatCurrency(day.receive || 0)}</td>
                   <td className="text-indigo-400">{formatCurrency(day.advance || 0)}</td>
                   <td className="text-red-400">{formatCurrency(day.payback || 0)}</td>
-                  <td className="text-emerald-300 font-semibold">{formatCurrency(day.cashInHand || 0)}</td>
+                  <td className="text-emerald-300 font-semibold">{formatCurrency(Math.max(0, Number(day.cashInHand || 0)))}</td>
                 </tr>
               ))
             ) : null}

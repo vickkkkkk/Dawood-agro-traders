@@ -334,6 +334,7 @@ export const getDailySales = async (req, res, next) => {
           receive: 0,
           advance: 0,
           payback: 0,
+          cashPayback: 0,
           cashInHand: 0,
           manualInflow: 0,
           manualOutflow: 0,
@@ -416,6 +417,7 @@ export const getDailySales = async (req, res, next) => {
                 receive: 0,
                 advance: 0,
                 payback: 0,
+                cashPayback: 0,
                 cashInHand: 0,
                 manualInflow: 0,
                 manualOutflow: 0,
@@ -431,6 +433,7 @@ export const getDailySales = async (req, res, next) => {
               dailyMap[dateKey].online -= amount;
             } else {
               dailyMap[dateKey].payback += amount;
+              dailyMap[dateKey].cashPayback += amount; // cash-mode paybacks reduce cashInHand
             }
             dailyMap[dateKey].total -= amount;
           }
@@ -451,6 +454,7 @@ export const getDailySales = async (req, res, next) => {
                 receive: 0,
                 advance: 0,
                 payback: 0,
+                cashPayback: 0,
                 cashInHand: 0,
                 manualInflow: 0,
                 manualOutflow: 0,
@@ -506,6 +510,7 @@ export const getDailySales = async (req, res, next) => {
           receive: 0,
           advance: 0,
           payback: 0,
+          cashPayback: 0,
           cashInHand: 0,
           manualInflow: 0,
           manualOutflow: 0,
@@ -542,7 +547,10 @@ export const getDailySales = async (req, res, next) => {
       const customInflow = Number(day.manualInflow || 0);
       const customOutflow = Number(day.manualOutflow || 0);
       const bankTransfers = Number(day.bankTransfers || 0);
-      day.cashInHand = day.cash + day.receive + day.advance - day.payback + customInflow - customOutflow - bankTransfers;
+      const cashPayback = Number(day.cashPayback || 0);
+      // Only count cash-mode transactions: cash sales + cash receives + cash advances
+      // minus cash paybacks and cash-paid expenses/purchases. Online/bank flows excluded.
+      day.cashInHand = day.cash + day.receive + day.advance - cashPayback + customInflow - customOutflow - bankTransfers;
     }
 
     res.json({

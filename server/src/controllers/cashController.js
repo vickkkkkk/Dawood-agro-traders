@@ -396,7 +396,8 @@ export const createCashTransaction = async (req, res, next) => {
       amount: amt,
       date: date ? new Date(date) : new Date(),
       description: description || null,
-      paymentMethod: pm
+      paymentMethod: pm,
+      category: (req.body.category || null)
     };
 
     if (activeType === 'PARTY_PAYMENT') {
@@ -435,6 +436,67 @@ export const createCashTransaction = async (req, res, next) => {
       message: 'Transaction recorded successfully.',
       data: transaction
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /api/cash/expenses
+export const getExpenses = async (req, res, next) => {
+  try {
+    const { page = 1, limit = 20, search = '', category = '' } = req.query;
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const where = { type: 'EXPENSE' };
+    if (category) where.category = category;
+
+    const [expenses, total] = await Promise.all([
+      prisma.cashTransaction.findMany({
+        where,
+        skip,
+        take: Number(limit),
+        orderBy: { date: 'desc' }
+      }),
+      prisma.cashTransaction.count({ where })
+    ]);
+
+    // Filter by search term in-memory
+    let filtered = expenses;
+    if (search) {
+      const q = search.toLowerCase();
+      filtered = expenses.filter(e =>
+        (e.description || '').toLowerCase().includes(q) ||
+        (e.category || '').toLowerCase().includes(q)
+      );
+    }
+
+    res.json({
+      success: true,
+      data: filtered,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        totalPages: Math.ceil(total / Number(limit))
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// DELETE /api/cash/expenses/:id
+export const deleteExpense = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const expense = await prisma.cashTransaction.findFirst({
+      where: { id: Number(id), type: 'EXPENSE' }
+    });
+    if (!expense) {
+      return res.status(404).json({ success: false, message: 'Expense not found.' });
+    }
+    await prisma.cashTransaction.delete({ where: { id: Number(id) } });
+    res.json({ success: true, message: 'Expense deleted successfully.' });
   } catch (error) {
     next(error);
   }

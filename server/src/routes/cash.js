@@ -4,7 +4,9 @@ import {
   getCashSummary,
   getCashLedger,
   getCashTransactions,
-  createCashTransaction
+  createCashTransaction,
+  getExpenses,
+  deleteExpense
 } from '../controllers/cashController.js';
 import verifyToken from '../middleware/auth.js';
 import authorize from '../middleware/roleCheck.js';
@@ -71,9 +73,18 @@ router.post(
     body('unitPrice')
       .optional()
       .isFloat({ min: 0.01 })
-      .withMessage('Unit price must be greater than 0.')
+      .withMessage('Unit price must be greater than 0.'),
+    body('category')
+      .optional()
+      .trim()
   ]),
   createCashTransaction
 );
+
+// GET /api/cash/expenses
+router.get('/expenses', getExpenses);
+
+// DELETE /api/cash/expenses/:id
+router.delete('/expenses/:id', deleteExpense);
 
 export default router;

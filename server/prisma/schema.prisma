@@ -230,6 +230,7 @@ model CashTransaction {
   paymentMethod    String   @default("CASH") // CASH, BANK
 
   // Subtype-specific fields
+  category         String?  // Expense category: Rent, Salary, Utilities, Maintenance, etc.
   partyName        String?  // Party Payment
   liabilityName    String?  // Liability Payment
   remainingBalance Float?   // Liability Payment

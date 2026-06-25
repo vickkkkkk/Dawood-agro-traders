@@ -7,7 +7,7 @@ import {
   Eye, Calendar, ClipboardList, ShieldAlert
 } from 'lucide-react';
 import {
-  getCashSummary, getCashLedger, createCashTransaction
+  getCashSummary, getCashLedger, createCashTransaction, getExpenses, deleteExpense
 } from '../api/cash';
 import {
   getLiabilities, payLiability
@@ -29,12 +29,17 @@ import { formatDate, formatDateTime } from '../utils/formatDate';
 
 const CashManagement = () => {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState('cash'); // cash, bank, transfer, party, liability, goods, transport
+  const [activeTab, setActiveTab] = useState('cash'); // cash, bank, transfer, party, liability, goods, transport, expense
 
   // Log tables states
   const [ledgerSearch, setLedgerSearch] = useState('');
   const [ledgerPage, setLedgerPage] = useState(1);
   const [purchaseSearch, setPurchaseSearch] = useState('');
+
+  // Daily Expense filters & pagination states
+  const [expenseSearch, setExpenseSearch] = useState('');
+  const [expenseCategory, setExpenseCategory] = useState('');
+  const [expensePage, setExpensePage] = useState(1);
 
   // Drill down details modals state
   const [selectedPurchase, setSelectedPurchase] = useState(null);
@@ -50,12 +55,13 @@ const CashManagement = () => {
   const [payDescription, setPayDescription] = useState('');
   const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0]);
 
-  // Form State (Bank Transfer / Party Payment)
+  // Form State (Bank Transfer / Party Payment / Expense)
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState('');
   const [partyName, setPartyName] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('CASH');
+  const [category, setCategory] = useState('Miscellaneous');
 
   // Queries
   const { data: summaryData, isLoading: summaryLoading } = useQuery({
@@ -92,6 +98,14 @@ const CashManagement = () => {
   });
   const purchases = purchasesData?.data || [];
 
+  const { data: expensesData, isLoading: expensesLoading } = useQuery({
+    queryKey: ['cash-expenses', expenseSearch, expenseCategory, expensePage],
+    queryFn: () => getExpenses({ page: expensePage, limit: 15, search: expenseSearch, category: expenseCategory }),
+    enabled: activeTab === 'expense'
+  });
+  const expensesList = expensesData?.data || [];
+  const expensesPagination = expensesData?.pagination || { page: 1, totalPages: 1, total: 0 };
+
   // Filtered Ledgers for Tabs
   const cashLedgerItems = ledgerItems.filter(item => item.paymentMethod === 'CASH');
   const bankLedgerItems = ledgerItems.filter(item => item.paymentMethod === 'BANK');
@@ -103,10 +117,24 @@ const CashManagement = () => {
       toast.success(res?.message || 'Transaction recorded successfully!');
       queryClient.invalidateQueries(['cash-summary']);
       queryClient.invalidateQueries(['cash-ledger']);
+      queryClient.invalidateQueries(['cash-expenses']);
       resetForm();
     },
     onError: (err) => {
       toast.error(err?.response?.data?.message || 'Failed to record transaction.');
+    }
+  });
+
+  const deleteExpenseMutation = useMutation({
+    mutationFn: deleteExpense,
+    onSuccess: (res) => {
+      toast.success(res?.message || 'Expense deleted/minus successfully!');
+      queryClient.invalidateQueries(['cash-summary']);
+      queryClient.invalidateQueries(['cash-ledger']);
+      queryClient.invalidateQueries(['cash-expenses']);
+    },
+    onError: (err) => {
+      toast.error(err?.response?.data?.message || 'Failed to delete expense.');
     }
   });
 
@@ -135,6 +163,7 @@ const CashManagement = () => {
     setDescription('');
     setPartyName('');
     setPaymentMethod('CASH');
+    setCategory('Miscellaneous');
   };
 
   const handleTabChange = (tab) => {
@@ -146,7 +175,9 @@ const CashManagement = () => {
     e.preventDefault();
 
     const payload = {
-      type: activeTab === 'transfer' ? 'BANK_TRANSFER' : 'PARTY_PAYMENT',
+      type: activeTab === 'transfer' ? 'BANK_TRANSFER' : 
+            activeTab === 'party' ? 'PARTY_PAYMENT' : 
+            activeTab === 'expense' ? 'EXPENSE' : '',
       date,
       description,
       paymentMethod
@@ -164,6 +195,10 @@ const CashManagement = () => {
         return;
       }
       payload.partyName = partyName;
+    }
+
+    if (activeTab === 'expense') {
+      payload.category = category;
     }
 
     // Check balance limits
@@ -400,6 +435,18 @@ const CashManagement = () => {
             <Truck size={16} />
             <span>Transport / Bilty</span>
           </button>
+
+          <button
+            onClick={() => handleTabChange('expense')}
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap lg:w-full ${
+              activeTab === 'expense'
+                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
+            }`}
+          >
+            <TrendingDown size={16} />
+            <span>Daily Expense</span>
+          </button>
         </div>
 
         {/* Right Side: Tab Contents */}
@@ -499,8 +546,8 @@ const CashManagement = () => {
             </Card>
           )}
 
-          {/* TAB 3 & 4: BANK TRANSFER / PARTY PAYMENT FORM */}
-          {(activeTab === 'transfer' || activeTab === 'party') && (
+          {/* TAB 3, 4 & EXPENSE: FORM AND LOGS */}
+          {(activeTab === 'transfer' || activeTab === 'party' || activeTab === 'expense') && (
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
               
               {/* Form Side */}
@@ -511,8 +558,11 @@ const CashManagement = () => {
                       <h3 className="text-sm font-bold text-white flex items-center gap-2">
                         {activeTab === 'transfer' && <Landmark size={16} className="text-cyan-400" />}
                         {activeTab === 'party' && <Users size={16} className="text-emerald-400" />}
+                        {activeTab === 'expense' && <TrendingDown size={16} className="text-rose-400" />}
                         Record {
-                          activeTab === 'transfer' ? 'Bank Deposit' : 'Party Payment'
+                          activeTab === 'transfer' ? 'Bank Deposit' : 
+                          activeTab === 'party' ? 'Party Payment' : 
+                          'Daily Shop Expense'
                         }
                       </h3>
                     </div>
@@ -541,6 +591,23 @@ const CashManagement = () => {
                       />
                     )}
 
+                    {activeTab === 'expense' && (
+                      <Select
+                        id="form-category"
+                        label="Expense Category *"
+                        options={[
+                          { value: 'Rent', label: 'Rent' },
+                          { value: 'Salary', label: 'Salary' },
+                          { value: 'Utilities', label: 'Utilities (Electricity, Water, Gas)' },
+                          { value: 'Maintenance', label: 'Maintenance' },
+                          { value: 'Tea & Refreshments', label: 'Tea & Refreshments' },
+                          { value: 'Miscellaneous', label: 'Miscellaneous / Other' }
+                        ]}
+                        value={category}
+                        onChange={(e) => setCategory(e.target.value)}
+                      />
+                    )}
+
                     <Input
                       id="form-amount"
                       label="Amount (PKR) *"
@@ -552,7 +619,7 @@ const CashManagement = () => {
                       onChange={(e) => setAmount(e.target.value)}
                     />
 
-                    {activeTab === 'party' && (
+                    {(activeTab === 'party' || activeTab === 'expense') && (
                       <Select
                         id="form-payment-method"
                         label="Payment Method *"
@@ -577,7 +644,9 @@ const CashManagement = () => {
                       id="form-desc"
                       label={activeTab === 'transfer' ? 'Reference Note' : 'Description / Notes'}
                       placeholder={
-                        activeTab === 'transfer' ? 'Cheque no, deposit slip, or online ref...' : 'Add transaction remarks...'
+                        activeTab === 'transfer' ? 'Cheque no, deposit slip, or online ref...' : 
+                        activeTab === 'expense' ? 'e.g. Electricity bill, tea service...' :
+                        'Add transaction remarks...'
                       }
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
@@ -600,63 +669,164 @@ const CashManagement = () => {
               <div className="md:col-span-7">
                 <Card padding={true}>
                   <div className="space-y-4">
-                    <div className="border-b border-white/5 pb-2">
+                    <div className="border-b border-white/5 pb-2 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 animate-fadeIn">
                       <h3 className="text-sm font-bold text-white">
-                        {activeTab === 'transfer' ? 'Bank Deposit Logs' : 'Party Payment Logs'}
+                        {activeTab === 'transfer' ? 'Bank Deposit Logs' : 
+                         activeTab === 'party' ? 'Party Payment Logs' : 
+                         'Detailed Expense Ledger'}
                       </h3>
+                      {activeTab === 'expense' && (
+                        <div className="flex gap-2 w-full sm:w-auto">
+                          <select
+                            id="expense-category-filter"
+                            className="bg-slate-900 border border-white/10 rounded-lg text-xs text-slate-300 px-2 py-1 focus:outline-none focus:border-emerald-500"
+                            value={expenseCategory}
+                            onChange={(e) => { setExpenseCategory(e.target.value); setExpensePage(1); }}
+                          >
+                            <option value="">All Categories</option>
+                            <option value="Rent">Rent</option>
+                            <option value="Salary">Salary</option>
+                            <option value="Utilities">Utilities</option>
+                            <option value="Maintenance">Maintenance</option>
+                            <option value="Tea & Refreshments">Tea & Refreshments</option>
+                            <option value="Miscellaneous">Miscellaneous</option>
+                          </select>
+                          <input
+                            type="text"
+                            placeholder="Search..."
+                            className="bg-slate-900 border border-white/10 rounded-lg text-xs text-slate-300 px-2.5 py-1 focus:outline-none focus:border-emerald-500 w-28"
+                            value={expenseSearch}
+                            onChange={(e) => { setExpenseSearch(e.target.value); setExpensePage(1); }}
+                          />
+                        </div>
+                      )}
                     </div>
 
                     <div className="overflow-x-auto min-h-[280px]">
                       <Table
                         id="form-log-table"
-                        loading={ledgerLoading}
+                        loading={activeTab === 'expense' ? expensesLoading : ledgerLoading}
                         headers={
-                          activeTab === 'transfer' ? ['Date', 'Notes', 'Amount'] : ['Date', 'Party', 'Method', 'Amount']
+                          activeTab === 'transfer' ? ['Date', 'Notes', 'Amount'] : 
+                          activeTab === 'party' ? ['Date', 'Party', 'Method', 'Amount'] :
+                          ['Date', 'Category', 'Method', 'Notes', 'Amount', 'Actions']
                         }
                         showPagination={false}
                       >
-                        {ledgerItems.filter(tx => tx.type === (activeTab === 'transfer' ? 'BANK_TRANSFER' : 'PARTY_PAYMENT')).length > 0 ? (
-                          ledgerItems
-                            .filter(tx => tx.type === (activeTab === 'transfer' ? 'BANK_TRANSFER' : 'PARTY_PAYMENT'))
-                            .map((log) => (
-                              <tr key={log.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                        {activeTab === 'expense' ? (
+                          expensesList.length > 0 ? (
+                            expensesList.map((exp) => (
+                              <tr key={exp.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
                                 <td className="px-4 py-2.5 text-[11px] text-slate-400">
-                                  {formatDate(log.date)}
+                                  {formatDate(exp.date)}
                                 </td>
-
-                                {activeTab === 'transfer' && (
-                                  <td className="px-4 py-2.5 text-xs text-slate-300">
-                                    {log.description || '-'}
-                                  </td>
-                                )}
-
-                                {activeTab === 'party' && (
-                                  <>
-                                    <td className="px-4 py-2.5 text-xs font-semibold text-white">
-                                      {log.details?.partyName || 'Unknown'}
-                                    </td>
-                                    <td className="px-4 py-2.5 text-xs">
-                                      <Badge variant={log.paymentMethod === 'BANK' ? 'warning' : 'success'}>
-                                        {log.paymentMethod || 'CASH'}
-                                      </Badge>
-                                    </td>
-                                  </>
-                                )}
-
+                                <td className="px-4 py-2.5 text-xs font-semibold text-white">
+                                  {exp.category || 'Miscellaneous'}
+                                </td>
+                                <td className="px-4 py-2.5 text-xs">
+                                  <Badge variant={exp.paymentMethod === 'BANK' ? 'warning' : 'success'}>
+                                    {exp.paymentMethod || 'CASH'}
+                                  </Badge>
+                                </td>
+                                <td className="px-4 py-2.5 text-xs text-slate-300 max-w-[150px] truncate" title={exp.description}>
+                                  {exp.description || '-'}
+                                </td>
                                 <td className="px-4 py-2.5 text-xs font-extrabold text-white text-right">
-                                  {formatCurrency(log.amount)}
+                                  {formatCurrency(exp.amount)}
+                                </td>
+                                <td className="px-4 py-2.5 text-xs text-center">
+                                  <Button
+                                    variant="danger"
+                                    size="sm"
+                                    onClick={() => {
+                                      if (confirm('Are you sure you want to delete/minus this daily expense? This will restore the cash/bank balance.')) {
+                                        deleteExpenseMutation.mutate(exp.id);
+                                      }
+                                    }}
+                                    className="px-2 py-1 text-[10px]"
+                                  >
+                                    Minus
+                                  </Button>
                                 </td>
                               </tr>
                             ))
+                          ) : (
+                            <tr>
+                              <td colSpan={6} className="py-16 text-center text-slate-500 text-xs">
+                                No daily expenses recorded.
+                              </td>
+                            </tr>
+                          )
                         ) : (
-                          <tr>
-                            <td colSpan={4} className="py-16 text-center text-slate-500 text-xs">
-                              No transaction logs found for this section.
-                            </td>
-                          </tr>
+                          ledgerItems.filter(tx => tx.type === (activeTab === 'transfer' ? 'BANK_TRANSFER' : 'PARTY_PAYMENT')).length > 0 ? (
+                            ledgerItems
+                              .filter(tx => tx.type === (activeTab === 'transfer' ? 'BANK_TRANSFER' : 'PARTY_PAYMENT'))
+                              .map((log) => (
+                                <tr key={log.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                                  <td className="px-4 py-2.5 text-[11px] text-slate-400">
+                                    {formatDate(log.date)}
+                                  </td>
+
+                                  {activeTab === 'transfer' && (
+                                    <td className="px-4 py-2.5 text-xs text-slate-300">
+                                      {log.description || '-'}
+                                    </td>
+                                  )}
+
+                                  {activeTab === 'party' && (
+                                    <>
+                                      <td className="px-4 py-2.5 text-xs font-semibold text-white">
+                                        {log.details?.partyName || 'Unknown'}
+                                      </td>
+                                      <td className="px-4 py-2.5 text-xs">
+                                        <Badge variant={log.paymentMethod === 'BANK' ? 'warning' : 'success'}>
+                                          {log.paymentMethod || 'CASH'}
+                                        </Badge>
+                                      </td>
+                                    </>
+                                  )}
+
+                                  <td className="px-4 py-2.5 text-xs font-extrabold text-white text-right">
+                                    {formatCurrency(log.amount)}
+                                  </td>
+                                </tr>
+                              ))
+                          ) : (
+                            <tr>
+                              <td colSpan={4} className="py-16 text-center text-slate-500 text-xs">
+                                No transaction logs found for this section.
+                              </td>
+                            </tr>
+                          )
                         )}
                       </Table>
                     </div>
+
+                    {activeTab === 'expense' && expensesPagination.totalPages > 1 && (
+                      <div className="flex justify-between items-center pt-4 border-t border-white/5 animate-fadeIn">
+                        <span className="text-xs text-slate-400">
+                          Showing page {expensePage} of {expensesPagination.totalPages}
+                        </span>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            disabled={expensePage === 1}
+                            onClick={() => setExpensePage(prev => Math.max(1, prev - 1))}
+                          >
+                            Previous
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            disabled={expensePage === expensesPagination.totalPages}
+                            onClick={() => setExpensePage(prev => Math.min(expensesPagination.totalPages, prev + 1))}
+                          >
+                            Next
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </Card>
               </div>

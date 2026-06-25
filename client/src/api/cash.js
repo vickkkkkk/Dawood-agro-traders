@@ -19,3 +19,14 @@ export const createCashTransaction = async (data) => {
   const response = await api.post('/cash/transactions', data);
   return response.data;
 };
+
+export const getExpenses = async (params = {}) => {
+  const response = await api.get('/cash/expenses', { params });
+  return response.data;
+};
+
+export const deleteExpense = async (id) => {
+  const response = await api.delete(`/cash/expenses/${id}`);
+  return response.data;
+};
+
