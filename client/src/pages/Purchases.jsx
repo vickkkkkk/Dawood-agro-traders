@@ -473,7 +473,7 @@ const Purchases = () => {
           id="new-purchase-modal"
           title="Record Goods Received (GRN)"
           onClose={() => setShowPurchaseModal(false)}
-          size="xl"
+          size="full"
           footer={
             <>
               <Button type="button" variant="secondary" onClick={() => setShowPurchaseModal(false)}>Cancel</Button>
@@ -577,9 +577,9 @@ const Purchases = () => {
                 </Button>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }} className="max-h-[350px] overflow-y-auto pr-1 pt-1">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }} className="max-h-[400px] overflow-y-auto pr-1 pt-1">
                 {purchaseItems.map((item, idx) => (
-                  <div key={idx} className="grid grid-cols-1 sm:grid-cols-[3fr_1fr_2fr_2fr_2fr_2fr_50px] gap-3 pt-4 pb-3 px-4 bg-white/[0.01] border border-white/5 rounded-xl items-end">
+                  <div key={idx} className="grid gap-3 pt-4 pb-3 px-4 bg-white/[0.01] border border-white/5 rounded-xl items-end" style={{ gridTemplateColumns: '3fr 1.2fr 2fr 2fr 2fr 2fr 44px' }}>
                     
                     <div>
                       <Select
