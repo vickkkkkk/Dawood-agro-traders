@@ -200,13 +200,15 @@ const Purchases = () => {
         errs.items[idx].quantity = 'Required';
       } else if (parseFloat(val) <= 0) {
         errs.items[idx].quantity = 'Must be > 0';
+      } else if (!Number.isInteger(Number(val))) {
+        errs.items[idx].quantity = 'Must be an integer';
       } else {
         delete errs.items[idx].quantity;
       }
     }
     if (field === 'unitPrice') {
       if (!val) {
-        errs.items[idx].unitPrice = 'Required';
+        errs.items[idx].unitPrice = 'Purchase Price is required';
       } else if (parseFloat(val) <= 0) {
         errs.items[idx].unitPrice = 'Must be > 0';
       } else {
@@ -290,9 +292,12 @@ const Purchases = () => {
       } else if (parseFloat(item.quantity) <= 0) {
         rowErr.quantity = 'Must be > 0';
         hasError = true;
+      } else if (!Number.isInteger(Number(item.quantity))) {
+        rowErr.quantity = 'Must be an integer';
+        hasError = true;
       }
       if (!item.unitPrice) {
-        rowErr.unitPrice = 'Cost is required';
+        rowErr.unitPrice = 'Purchase Price is required';
         hasError = true;
       } else if (parseFloat(item.unitPrice) <= 0) {
         rowErr.unitPrice = 'Must be > 0';
@@ -326,7 +331,7 @@ const Purchases = () => {
       transportPaymentMethod: parseFloat(transportCost) > 0 ? transportPaymentMethod : null,
       items: purchaseItems.map(item => ({
         productId: parseInt(item.productId),
-        quantity: parseFloat(item.quantity),
+        quantity: parseInt(item.quantity, 10),
         unitPrice: parseFloat(item.unitPrice),
         salePrice: parseFloat(item.salePrice),
         batchNo: item.batchNo || null,
@@ -574,9 +579,9 @@ const Purchases = () => {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }} className="max-h-[350px] overflow-y-auto pr-1 pt-1">
                 {purchaseItems.map((item, idx) => (
-                  <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-4 pb-3 px-4 bg-white/[0.01] border border-white/5 rounded-xl items-end">
+                  <div key={idx} className="grid grid-cols-1 sm:grid-cols-[3fr_1fr_2fr_2fr_2fr_2fr_50px] gap-3 pt-4 pb-3 px-4 bg-white/[0.01] border border-white/5 rounded-xl items-end">
                     
-                    <div className="sm:col-span-3">
+                    <div>
                       <Select
                         id={`pur-prod-${idx}`}
                         label="Product *"
@@ -589,13 +594,14 @@ const Purchases = () => {
                       />
                     </div>
 
-                    <div className="sm:col-span-2">
+                    <div>
                       <Input
                         id={`pur-qty-${idx}`}
                         label="Quantity *"
                         type="number"
                         required
-                        min="0.01"
+                        min="1"
+                        step="1"
                         icon={Layers}
                         placeholder="0"
                         value={item.quantity}
@@ -604,10 +610,10 @@ const Purchases = () => {
                       />
                     </div>
 
-                    <div className="sm:col-span-2">
+                    <div>
                       <Input
                         id={`pur-price-${idx}`}
-                        label="Cost Price *"
+                        label="Purchase Price *"
                         type="number"
                         required
                         min="0.01"
@@ -619,7 +625,7 @@ const Purchases = () => {
                       />
                     </div>
 
-                    <div className="sm:col-span-2">
+                    <div>
                       <Input
                         id={`pur-sale-${idx}`}
                         label="Sale Price *"
@@ -634,28 +640,26 @@ const Purchases = () => {
                       />
                     </div>
 
-                    <div className="sm:col-span-2 flex gap-2">
-                      <div className="flex-1">
-                        <Input
-                          id={`pur-batch-${idx}`}
-                          label="Batch"
-                          placeholder="Batch..."
-                          value={item.batchNo}
-                          onChange={(e) => handleRowChange(idx, 'batchNo', e.target.value)}
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <DatePicker
-                          id={`pur-expiry-${idx}`}
-                          label="Expiry"
-                          value={item.expiryDate}
-                          onChange={(e) => handleRowChange(idx, 'expiryDate', e.target.value)}
-                          className="!text-[10px]"
-                        />
-                      </div>
+                    <div>
+                      <Input
+                        id={`pur-batch-${idx}`}
+                        label="Batch"
+                        placeholder="Batch..."
+                        value={item.batchNo}
+                        onChange={(e) => handleRowChange(idx, 'batchNo', e.target.value)}
+                      />
                     </div>
 
-                    <div className="sm:col-span-1 flex justify-center pb-1">
+                    <div>
+                      <DatePicker
+                        id={`pur-expiry-${idx}`}
+                        label="Expiry"
+                        value={item.expiryDate}
+                        onChange={(e) => handleRowChange(idx, 'expiryDate', e.target.value)}
+                      />
+                    </div>
+
+                    <div className="flex justify-center pb-1">
                       <Button
                         type="button"
                         variant="danger"
@@ -675,7 +679,7 @@ const Purchases = () => {
             {/* Calculations Footer */}
             <div className="flex justify-between items-center border-t border-white/10 pt-4">
               <div className="text-sm text-slate-400">
-                Goods Cost Total:
+                Goods Purchase Total:
               </div>
               <div className="text-xl font-bold text-emerald-400">
                 {formatCurrency(calculatePurchaseTotal())}
@@ -966,7 +970,7 @@ const Purchases = () => {
                     <tr className="border-b border-white/5 text-slate-400 uppercase tracking-wider font-semibold">
                       <th className="py-2">Item Name</th>
                       <th className="py-2 text-right">Qty</th>
-                      <th className="py-2 text-right">Cost Price</th>
+                      <th className="py-2 text-right">Purchase Price</th>
                       <th className="py-2 text-right">Sale Price</th>
                       <th className="py-2 text-right">Total Price</th>
                     </tr>
@@ -1000,7 +1004,7 @@ const Purchases = () => {
             {/* Summary details */}
             <div className="pt-4 border-t border-white/5 space-y-2 text-sm">
               <div className="flex justify-between text-xs text-slate-400">
-                <span>Goods total:</span>
+                <span>Goods purchase total:</span>
                 <span>{formatCurrency(selectedPurchase.total)}</span>
               </div>
               {selectedPurchase.transportCost > 0 && (

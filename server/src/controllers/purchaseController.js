@@ -182,7 +182,10 @@ export const createPurchase = async (req, res, next) => {
 
         const unitPrice = Number(item.unitPrice);
         const salePrice = Number(item.salePrice || 0);
-        const quantity = Number(item.quantity);
+        const quantity = parseInt(item.quantity, 10);
+        if (isNaN(quantity) || quantity <= 0 || quantity !== Number(item.quantity)) {
+          throw Object.assign(new Error(`Quantity for product "${product.name}" must be a positive integer.`), { statusCode: 400 });
+        }
         const itemTotal = unitPrice * quantity;
 
         purchaseItems.push({
