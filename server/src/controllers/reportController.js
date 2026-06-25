@@ -335,6 +335,9 @@ export const getDailySales = async (req, res, next) => {
           advance: 0,
           payback: 0,
           cashInHand: 0,
+          manualInflow: 0,
+          manualOutflow: 0,
+          bankTransfers: 0,
         };
       }
       dailyMap[dateKey].billCount += 1;
@@ -414,6 +417,9 @@ export const getDailySales = async (req, res, next) => {
                 advance: 0,
                 payback: 0,
                 cashInHand: 0,
+                manualInflow: 0,
+                manualOutflow: 0,
+                bankTransfers: 0,
               };
             }
 
@@ -446,6 +452,9 @@ export const getDailySales = async (req, res, next) => {
                 advance: 0,
                 payback: 0,
                 cashInHand: 0,
+                manualInflow: 0,
+                manualOutflow: 0,
+                bankTransfers: 0,
               };
             }
 
@@ -476,9 +485,52 @@ export const getDailySales = async (req, res, next) => {
       }
     }
 
+    // --- Fetch custom Cash transactions ---
+    const cashTxs = await prisma.cashTransaction.findMany({
+      where: {
+        date: { gte: startDate, lte: endDate }
+      }
+    });
+
+    for (const tx of cashTxs) {
+      const dateKey = tx.date.toISOString().slice(0, 10);
+      if (!dailyMap[dateKey]) {
+        dailyMap[dateKey] = {
+          date: dateKey,
+          total: 0,
+          billCount: 0,
+          cash: 0,
+          online: 0,
+          credit: 0,
+          totalDiscount: 0,
+          receive: 0,
+          advance: 0,
+          payback: 0,
+          cashInHand: 0,
+          manualInflow: 0,
+          manualOutflow: 0,
+          bankTransfers: 0,
+        };
+      }
+      const amt = Number(tx.amount || 0);
+      if (tx.type === 'INFLOW') {
+        dailyMap[dateKey].manualInflow += amt;
+      } else if (tx.type === 'BANK_TRANSFER') {
+        dailyMap[dateKey].bankTransfers += amt;
+        dailyMap[dateKey].online += amt;
+        dailyMap[dateKey].total += amt;
+      } else {
+        // EXPENSE, PARTY_PAYMENT, LIABILITY, GOODS_PURCHASE
+        dailyMap[dateKey].manualOutflow += amt;
+      }
+    }
+
     // --- Pass 3: compute cashInHand per day ---
     for (const day of Object.values(dailyMap)) {
-      day.cashInHand = day.cash + day.receive + day.advance - day.payback;
+      const customInflow = Number(day.manualInflow || 0);
+      const customOutflow = Number(day.manualOutflow || 0);
+      const bankTransfers = Number(day.bankTransfers || 0);
+      day.cashInHand = day.cash + day.receive + day.advance - day.payback + customInflow - customOutflow - bankTransfers;
     }
 
     res.json({
