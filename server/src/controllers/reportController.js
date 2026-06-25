@@ -513,15 +513,27 @@ export const getDailySales = async (req, res, next) => {
         };
       }
       const amt = Number(tx.amount || 0);
+      const isBank = tx.paymentMethod?.toUpperCase() === 'BANK';
+
       if (tx.type === 'INFLOW') {
-        dailyMap[dateKey].manualInflow += amt;
+        if (isBank) {
+          dailyMap[dateKey].online += amt;
+          dailyMap[dateKey].total += amt;
+        } else {
+          dailyMap[dateKey].manualInflow += amt;
+        }
       } else if (tx.type === 'BANK_TRANSFER') {
         dailyMap[dateKey].bankTransfers += amt;
         dailyMap[dateKey].online += amt;
         dailyMap[dateKey].total += amt;
       } else {
-        // EXPENSE, PARTY_PAYMENT, LIABILITY, GOODS_PURCHASE
-        dailyMap[dateKey].manualOutflow += amt;
+        // EXPENSE, PARTY_PAYMENT, LIABILITY, GOODS_PURCHASE, TRANSPORT
+        if (isBank) {
+          dailyMap[dateKey].online -= amt;
+          dailyMap[dateKey].total -= amt;
+        } else {
+          dailyMap[dateKey].manualOutflow += amt;
+        }
       }
     }
 

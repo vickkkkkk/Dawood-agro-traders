@@ -33,8 +33,13 @@ router.post(
       .trim()
       .notEmpty()
       .withMessage('Transaction type is required.')
-      .isIn(['INFLOW', 'EXPENSE', 'BANK_TRANSFER', 'PARTY_PAYMENT', 'LIABILITY', 'GOODS_PURCHASE'])
+      .isIn(['INFLOW', 'EXPENSE', 'BANK_TRANSFER', 'PARTY_PAYMENT', 'LIABILITY', 'GOODS_PURCHASE', 'TRANSPORT'])
       .withMessage('Invalid transaction type.'),
+    body('paymentMethod')
+      .optional()
+      .trim()
+      .isIn(['CASH', 'BANK'])
+      .withMessage('Invalid payment method.'),
     body('amount')
       .optional() // amount is computed automatically for GOODS_PURCHASE (qty * unitPrice), but otherwise required
       .isFloat({ min: 0.01 })

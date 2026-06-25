@@ -180,6 +180,7 @@ model CashTransaction {
   amount           Float
   date             DateTime @default(now())
   description      String?  // Reference note / notes
+  paymentMethod    String   @default("CASH") // CASH, BANK
 
   // Subtype-specific fields
   partyName        String?  // Party Payment

@@ -69,34 +69,47 @@ const getBalances = async () => {
     select: {
       type: true,
       amount: true,
+      paymentMethod: true,
     }
   });
 
   let manualInflow = 0;
-  let manualOutflow = 0; // EXPENSE, PARTY_PAYMENT, LIABILITY, GOODS_PURCHASE
+  let manualBankInflow = 0;
+  let manualOutflow = 0; // EXPENSE, PARTY_PAYMENT, LIABILITY, GOODS_PURCHASE, TRANSPORT
+  let manualBankOutflow = 0;
   let bankTransfers = 0;
 
   for (const tx of cashTxs) {
     const amt = Number(tx.amount || 0);
+    const isBank = tx.paymentMethod?.toUpperCase() === 'BANK';
+
     if (tx.type === 'INFLOW') {
-      manualInflow += amt;
+      if (isBank) {
+        manualBankInflow += amt;
+      } else {
+        manualInflow += amt;
+      }
     } else if (tx.type === 'BANK_TRANSFER') {
       bankTransfers += amt;
     } else {
-      // EXPENSE, PARTY_PAYMENT, LIABILITY, GOODS_PURCHASE
-      manualOutflow += amt;
+      // EXPENSE, PARTY_PAYMENT, LIABILITY, GOODS_PURCHASE, TRANSPORT
+      if (isBank) {
+        manualBankOutflow += amt;
+      } else {
+        manualOutflow += amt;
+      }
     }
   }
 
   const cashInHand = posCashInflow + creditCashInflow - creditCashOutflow + manualInflow - manualOutflow - bankTransfers;
-  const bankBalance = posOnlineInflow + creditOnlineInflow - creditOnlineOutflow + bankTransfers;
-  const totalOut = creditCashOutflow + manualOutflow;
+  const bankBalance = posOnlineInflow + creditOnlineInflow - creditOnlineOutflow + bankTransfers + manualBankInflow - manualBankOutflow;
+  const totalOut = creditCashOutflow + manualOutflow + manualBankOutflow;
   const totalBankTransferred = bankTransfers;
 
   return {
     cashInHand,
     bankBalance,
-    totalInflows: posCashInflow + creditCashInflow + manualInflow,
+    totalInflows: posCashInflow + creditCashInflow + manualInflow + manualBankInflow,
     totalOutflows: totalOut,
     totalBankTransferred,
   };
@@ -193,18 +206,22 @@ export const getCashLedger = async (req, res, next) => {
       }
 
       let desc = tx.description || '';
+      const methodLabel = tx.paymentMethod?.toUpperCase() === 'BANK' ? ' (Paid from Bank)' : '';
+
       if (tx.type === 'BANK_TRANSFER') {
         desc = `Transfer to Bank: ${tx.description || 'Deposit'}`;
       } else if (tx.type === 'PARTY_PAYMENT') {
-        desc = `Party Payment to ${tx.partyName}${tx.description ? ` - ${tx.description}` : ''}`;
+        desc = `Party Payment to ${tx.partyName}${methodLabel}${tx.description ? ` - ${tx.description}` : ''}`;
       } else if (tx.type === 'LIABILITY') {
-        desc = `Liability Payment: ${tx.liabilityName} (Remaining Balance: PKR ${tx.remainingBalance || 0})${tx.description ? ` - ${tx.description}` : ''}`;
+        desc = `Liability Payment: ${tx.liabilityName} (Remaining Balance: PKR ${tx.remainingBalance || 0})${methodLabel}${tx.description ? ` - ${tx.description}` : ''}`;
       } else if (tx.type === 'GOODS_PURCHASE') {
-        desc = `Purchase of Goods: ${tx.itemName} x ${tx.quantity} @ PKR ${tx.unitPrice}${tx.description ? ` - ${tx.description}` : ''}`;
+        desc = `Purchase of Goods: ${tx.itemName} x ${tx.quantity} @ PKR ${tx.unitPrice}${methodLabel}${tx.description ? ` - ${tx.description}` : ''}`;
+      } else if (tx.type === 'TRANSPORT') {
+        desc = `Transport / Bilty: ${tx.description || 'Transport Charges'}${methodLabel}`;
       } else if (tx.type === 'EXPENSE') {
-        desc = `Expense: ${tx.description || 'General Outflow'}`;
+        desc = `Expense: ${tx.description || 'General Outflow'}${methodLabel}`;
       } else if (tx.type === 'INFLOW') {
-        desc = `Manual Inflow: ${tx.description || 'General Inflow'}`;
+        desc = `Manual Inflow: ${tx.description || 'General Inflow'}${tx.paymentMethod?.toUpperCase() === 'BANK' ? ' (Deposited to Bank)' : ''}`;
       }
 
       return {
@@ -220,7 +237,8 @@ export const getCashLedger = async (req, res, next) => {
           remainingBalance: tx.remainingBalance,
           itemName: tx.itemName,
           quantity: tx.quantity,
-          unitPrice: tx.unitPrice
+          unitPrice: tx.unitPrice,
+          paymentMethod: tx.paymentMethod
         }
       };
     });
@@ -308,11 +326,12 @@ export const createCashTransaction = async (req, res, next) => {
       remainingBalance,
       itemName,
       quantity,
-      unitPrice
+      unitPrice,
+      paymentMethod = 'CASH'
     } = req.body;
 
     // Validate type
-    const validTypes = ['INFLOW', 'EXPENSE', 'BANK_TRANSFER', 'PARTY_PAYMENT', 'LIABILITY', 'GOODS_PURCHASE'];
+    const validTypes = ['INFLOW', 'EXPENSE', 'BANK_TRANSFER', 'PARTY_PAYMENT', 'LIABILITY', 'GOODS_PURCHASE', 'TRANSPORT'];
     if (!type || !validTypes.includes(type.toUpperCase())) {
       return res.status(400).json({
         success: false,
@@ -320,23 +339,33 @@ export const createCashTransaction = async (req, res, next) => {
       });
     }
 
+    const activeType = type.toUpperCase();
+
     // Validate amount
     const amt = Number(amount);
-    if (isNaN(amt) || amt <= 0) {
+    if (activeType !== 'GOODS_PURCHASE' && (isNaN(amt) || amt <= 0)) {
       return res.status(400).json({
         success: false,
         message: 'Amount must be a positive number.'
       });
     }
 
-    // Check balance if it is an outflow to prevent overdraft (optional alert, but good practice)
-    const activeType = type.toUpperCase();
+    // Check balance if it is an outflow to prevent overdraft
+    const pm = paymentMethod?.toUpperCase() === 'BANK' ? 'BANK' : 'CASH';
+
     if (activeType !== 'INFLOW') {
-      const { cashInHand } = await getBalances();
-      if (amt > cashInHand) {
+      const { cashInHand, bankBalance } = await getBalances();
+      const neededAmt = activeType === 'GOODS_PURCHASE' ? (Number(quantity || 0) * Number(unitPrice || 0)) : amt;
+
+      if (pm === 'CASH' && neededAmt > cashInHand) {
         return res.status(400).json({
           success: false,
-          message: `Insufficient cash in hand. Available balance is PKR ${cashInHand.toFixed(2)}, but requested PKR ${amt.toFixed(2)}.`
+          message: `Insufficient cash in hand. Available cash is PKR ${cashInHand.toFixed(2)}, but requested PKR ${neededAmt.toFixed(2)}.`
+        });
+      } else if (pm === 'BANK' && neededAmt > bankBalance) {
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient bank balance. Available balance is PKR ${bankBalance.toFixed(2)}, but requested PKR ${neededAmt.toFixed(2)}.`
         });
       }
     }
@@ -346,7 +375,8 @@ export const createCashTransaction = async (req, res, next) => {
       type: activeType,
       amount: amt,
       date: date ? new Date(date) : new Date(),
-      description: description || null
+      description: description || null,
+      paymentMethod: pm
     };
 
     if (activeType === 'PARTY_PAYMENT') {
@@ -373,7 +403,6 @@ export const createCashTransaction = async (req, res, next) => {
       txData.itemName = itemName.trim();
       txData.quantity = Number(quantity);
       txData.unitPrice = Number(unitPrice);
-      // Ensure the amount equals total = quantity * unitPrice if not provided or just use amount
       txData.amount = Number(quantity) * Number(unitPrice);
     }
 
@@ -383,7 +412,7 @@ export const createCashTransaction = async (req, res, next) => {
 
     res.status(201).json({
       success: true,
-      message: 'Cash transaction recorded successfully.',
+      message: 'Transaction recorded successfully.',
       data: transaction
     });
   } catch (error) {

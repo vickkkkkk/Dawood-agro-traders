@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
 import {
   Wallet, ArrowDownLeft, ArrowUpRight, Landmark, Building, Plus, Search,
-  Users, AlertCircle, ShoppingCart, TrendingDown, TrendingUp, Info, HelpCircle
+  Users, AlertCircle, ShoppingCart, TrendingDown, TrendingUp, Info, HelpCircle, Truck
 } from 'lucide-react';
 import {
   getCashSummary, getCashLedger, getCashTransactions, createCashTransaction
@@ -42,6 +42,7 @@ const CashManagement = () => {
   const [itemName, setItemName] = useState('');
   const [quantity, setQuantity] = useState('');
   const [unitPrice, setUnitPrice] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('CASH');
 
   // Queries
   const { data: summaryData, isLoading: summaryLoading } = useQuery({
@@ -64,7 +65,8 @@ const CashManagement = () => {
     liability: 'LIABILITY',
     goods: 'GOODS_PURCHASE',
     expense: 'EXPENSE',
-    inflow: 'INFLOW'
+    inflow: 'INFLOW',
+    transport: 'TRANSPORT'
   }[activeTab];
 
   const { data: txLogsData, isLoading: txLogsLoading } = useQuery({
@@ -103,6 +105,7 @@ const CashManagement = () => {
     setItemName('');
     setQuantity('');
     setUnitPrice('');
+    setPaymentMethod('CASH');
   };
 
   const handleTabChange = (tab) => {
@@ -117,7 +120,8 @@ const CashManagement = () => {
     const payload = {
       type: activeTxType,
       date,
-      description
+      description,
+      paymentMethod
     };
 
     if (activeTab === 'goods') {
@@ -155,8 +159,11 @@ const CashManagement = () => {
     // Check balance limit
     if (activeTab !== 'inflow') {
       const neededAmt = activeTab === 'goods' ? (parseFloat(quantity) * parseFloat(unitPrice)) : parseFloat(amount);
-      if (neededAmt > summary.cashInHand) {
+      if (paymentMethod === 'CASH' && neededAmt > summary.cashInHand) {
         toast.error(`Transaction exceeds available Cash in Hand (PKR ${summary.cashInHand.toFixed(2)})`);
+        return;
+      } else if (paymentMethod === 'BANK' && neededAmt > summary.bankBalance) {
+        toast.error(`Transaction exceeds available Bank Balance (PKR ${summary.bankBalance.toFixed(2)})`);
         return;
       }
     }
@@ -311,6 +318,18 @@ const CashManagement = () => {
           </button>
 
           <button
+            onClick={() => handleTabChange('transport')}
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap lg:w-full ${
+              activeTab === 'transport'
+                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
+            }`}
+          >
+            <Truck size={16} />
+            <span>Transport / Bilty</span>
+          </button>
+
+          <button
             onClick={() => handleTabChange('expense')}
             className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap lg:w-full ${
               activeTab === 'expense'
@@ -442,6 +461,7 @@ const CashManagement = () => {
                         {activeTab === 'party' && <Users size={16} className="text-emerald-400" />}
                         {activeTab === 'liability' && <AlertCircle size={16} className="text-rose-400" />}
                         {activeTab === 'goods' && <ShoppingCart size={16} className="text-amber-400" />}
+                        {activeTab === 'transport' && <Truck size={16} className="text-blue-400" />}
                         {activeTab === 'expense' && <TrendingDown size={16} className="text-rose-400" />}
                         {activeTab === 'inflow' && <TrendingUp size={16} className="text-emerald-400" />}
                         Record {
@@ -449,6 +469,7 @@ const CashManagement = () => {
                           activeTab === 'party' ? 'Party Payment' :
                           activeTab === 'liability' ? 'Liability Settle' :
                           activeTab === 'goods' ? 'Goods Purchase' :
+                          activeTab === 'transport' ? 'Transport / Bilty' :
                           activeTab === 'expense' ? 'Daily Expense' :
                           'Manual Inflow'
                         }
@@ -460,8 +481,12 @@ const CashManagement = () => {
                       <div className="p-3 bg-white/5 border border-white/5 rounded-xl text-[11px] text-slate-400 flex gap-2 items-start">
                         <Info size={14} className="text-emerald-400 flex-shrink-0 mt-0.5" />
                         <div>
-                          Available Cash in Hand: <strong className="text-white">{formatCurrency(summary.cashInHand)}</strong>.
-                          Your payment amount will be deducted from this balance.
+                          {paymentMethod === 'CASH' ? (
+                            <>Available Cash in Hand: <strong className="text-white">{formatCurrency(summary.cashInHand)}</strong>.</>
+                          ) : (
+                            <>Available Bank Balance: <strong className="text-white">{formatCurrency(summary.bankBalance)}</strong>.</>
+                          )}
+                          {" "}Your payment amount will be deducted from this balance.
                         </div>
                       </div>
                     )}
@@ -553,6 +578,19 @@ const CashManagement = () => {
                       />
                     )}
 
+                    {activeTab !== 'transfer' && (
+                      <Select
+                        id="form-payment-method"
+                        label="Payment Method *"
+                        options={[
+                          { value: 'CASH', label: 'Cash in Hand' },
+                          { value: 'BANK', label: 'Bank Account' }
+                        ]}
+                        value={paymentMethod}
+                        onChange={(e) => setPaymentMethod(e.target.value)}
+                      />
+                    )}
+
                     <DatePicker
                       id="form-date"
                       label="Transaction Date *"
@@ -602,10 +640,10 @@ const CashManagement = () => {
                         loading={txLogsLoading}
                         headers={
                           activeTab === 'transfer' ? ['Date', 'Notes', 'Amount'] :
-                          activeTab === 'party' ? ['Date', 'Party', 'Description', 'Amount'] :
-                          activeTab === 'liability' ? ['Date', 'Liability Name', 'Remaining', 'Paid'] :
-                          activeTab === 'goods' ? ['Date', 'Item', 'Qty x Price', 'Total Paid'] :
-                          ['Date', 'Description', 'Amount']
+                          activeTab === 'party' ? ['Date', 'Party', 'Description', 'Method', 'Amount'] :
+                          activeTab === 'liability' ? ['Date', 'Liability Name', 'Remaining', 'Method', 'Paid'] :
+                          activeTab === 'goods' ? ['Date', 'Item', 'Qty x Price', 'Method', 'Total Paid'] :
+                          ['Date', 'Description', 'Method', 'Amount']
                         }
                         showPagination={false}
                       >
@@ -630,6 +668,11 @@ const CashManagement = () => {
                                   <td className="px-4 py-2.5 text-xs text-slate-300">
                                     {log.description || '-'}
                                   </td>
+                                  <td className="px-4 py-2.5 text-xs">
+                                    <Badge variant={log.paymentMethod === 'BANK' ? 'warning' : 'success'}>
+                                      {log.paymentMethod || 'CASH'}
+                                    </Badge>
+                                  </td>
                                 </>
                               )}
 
@@ -640,6 +683,11 @@ const CashManagement = () => {
                                   </td>
                                   <td className="px-4 py-2.5 text-xs text-rose-400 font-bold">
                                     {formatCurrency(log.remainingBalance)}
+                                  </td>
+                                  <td className="px-4 py-2.5 text-xs">
+                                    <Badge variant={log.paymentMethod === 'BANK' ? 'warning' : 'success'}>
+                                      {log.paymentMethod || 'CASH'}
+                                    </Badge>
                                   </td>
                                 </>
                               )}
@@ -652,13 +700,25 @@ const CashManagement = () => {
                                   <td className="px-4 py-2.5 text-[11px] text-slate-400">
                                     {log.quantity} x {formatCurrency(log.unitPrice)}
                                   </td>
+                                  <td className="px-4 py-2.5 text-xs">
+                                    <Badge variant={log.paymentMethod === 'BANK' ? 'warning' : 'success'}>
+                                      {log.paymentMethod || 'CASH'}
+                                    </Badge>
+                                  </td>
                                 </>
                               )}
 
                               {activeTab !== 'transfer' && activeTab !== 'party' && activeTab !== 'liability' && activeTab !== 'goods' && (
-                                <td className="px-4 py-2.5 text-xs text-slate-300">
-                                  {log.description || '-'}
-                                </td>
+                                <>
+                                  <td className="px-4 py-2.5 text-xs text-slate-300">
+                                    {log.description || '-'}
+                                  </td>
+                                  <td className="px-4 py-2.5 text-xs">
+                                    <Badge variant={log.paymentMethod === 'BANK' ? 'warning' : 'success'}>
+                                      {log.paymentMethod || 'CASH'}
+                                    </Badge>
+                                  </td>
+                                </>
                               )}
 
                               <td className="px-4 py-2.5 text-xs font-extrabold text-white text-right">
