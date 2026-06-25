@@ -21,6 +21,7 @@ import PurchaseLedger from './pages/PurchaseLedger';
 import PurchaseLedgerDetail from './pages/PurchaseLedgerDetail';
 import SalesLedger from './pages/SalesLedger';
 import SalesLedgerDetail from './pages/SalesLedgerDetail';
+import CashManagement from './pages/CashManagement';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -52,6 +53,7 @@ function App() {
                   <Route path="/inventory" element={<Inventory />} />
                   <Route path="/purchases" element={<Purchases />} />
                   <Route path="/credits" element={<CreditLedger />} />
+                  <Route path="/cash-management" element={<CashManagement />} />
                   <Route path="/purchase-ledger" element={<PurchaseLedger />} />
                   <Route path="/purchase-ledger/:productId" element={<PurchaseLedgerDetail />} />
                   <Route path="/sales-ledger" element={<SalesLedger />} />

@@ -173,3 +173,25 @@ model CreditTransaction {
 
   @@map("credit_transactions")
 }
+
+model CashTransaction {
+  id               Int      @id @default(autoincrement())
+  type             String   // INFLOW, EXPENSE, BANK_TRANSFER, PARTY_PAYMENT, LIABILITY, GOODS_PURCHASE
+  amount           Float
+  date             DateTime @default(now())
+  description      String?  // Reference note / notes
+
+  // Subtype-specific fields
+  partyName        String?  // Party Payment
+  liabilityName    String?  // Liability Payment
+  remainingBalance Float?   // Liability Payment
+  itemName         String?  // Purchase of Goods
+  quantity         Float?   // Purchase of Goods
+  unitPrice        Float?   // Purchase of Goods
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("cash_transactions")
+}
+
