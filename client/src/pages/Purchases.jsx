@@ -599,9 +599,7 @@ const Purchases = () => {
                         id={`pur-qty-${idx}`}
                         label="Quantity *"
                         type="number"
-                        required
-                        min="1"
-                        step="1"
+                        step="any"
                         icon={Layers}
                         placeholder="0"
                         value={item.quantity}
@@ -615,8 +613,7 @@ const Purchases = () => {
                         id={`pur-price-${idx}`}
                         label="Purchase Price *"
                         type="number"
-                        required
-                        min="0.01"
+                        step="any"
                         placeholder="0"
                         icon={DollarSign}
                         value={item.unitPrice}
@@ -630,8 +627,7 @@ const Purchases = () => {
                         id={`pur-sale-${idx}`}
                         label="Sale Price *"
                         type="number"
-                        required
-                        min="0.01"
+                        step="any"
                         placeholder="0"
                         icon={DollarSign}
                         value={item.salePrice}
