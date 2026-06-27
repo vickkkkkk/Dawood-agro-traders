@@ -180,7 +180,7 @@ const CashManagement = () => {
             activeTab === 'expense' ? 'EXPENSE' : '',
       date,
       description,
-      paymentMethod
+      paymentMethod: activeTab === 'transfer' ? 'CASH' : paymentMethod
     };
 
     if (!amount) {
@@ -612,7 +612,7 @@ const CashManagement = () => {
                       id="form-amount"
                       label="Amount (PKR) *"
                       type="number"
-                      step="0.01"
+                      step="any"
                       required
                       placeholder="e.g. 10000"
                       value={amount}
@@ -1135,6 +1135,7 @@ const CashManagement = () => {
               label="Payment Amount (PKR) *"
               type="number"
               required
+              step="any"
               min="0.01"
               max={payingLiability.remainingBalance}
               value={payAmount}

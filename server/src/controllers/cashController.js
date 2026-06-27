@@ -377,16 +377,25 @@ export const createCashTransaction = async (req, res, next) => {
       const { cashInHand, bankBalance } = await getBalances();
       const neededAmt = activeType === 'GOODS_PURCHASE' ? (Number(quantity || 0) * Number(unitPrice || 0)) : amt;
 
-      if (pm === 'CASH' && neededAmt > cashInHand) {
-        return res.status(400).json({
-          success: false,
-          message: `Insufficient cash in hand. Available cash is PKR ${cashInHand.toFixed(2)}, but requested PKR ${neededAmt.toFixed(2)}.`
-        });
-      } else if (pm === 'BANK' && neededAmt > bankBalance) {
-        return res.status(400).json({
-          success: false,
-          message: `Insufficient bank balance. Available balance is PKR ${bankBalance.toFixed(2)}, but requested PKR ${neededAmt.toFixed(2)}.`
-        });
+      if (activeType === 'BANK_TRANSFER') {
+        if (neededAmt > cashInHand) {
+          return res.status(400).json({
+            success: false,
+            message: `Insufficient cash in hand. Available cash is PKR ${cashInHand.toFixed(2)}, but requested PKR ${neededAmt.toFixed(2)}.`
+          });
+        }
+      } else {
+        if (pm === 'CASH' && neededAmt > cashInHand) {
+          return res.status(400).json({
+            success: false,
+            message: `Insufficient cash in hand. Available cash is PKR ${cashInHand.toFixed(2)}, but requested PKR ${neededAmt.toFixed(2)}.`
+          });
+        } else if (pm === 'BANK' && neededAmt > bankBalance) {
+          return res.status(400).json({
+            success: false,
+            message: `Insufficient bank balance. Available balance is PKR ${bankBalance.toFixed(2)}, but requested PKR ${neededAmt.toFixed(2)}.`
+          });
+        }
       }
     }
 
@@ -396,7 +405,7 @@ export const createCashTransaction = async (req, res, next) => {
       amount: amt,
       date: date ? new Date(date) : new Date(),
       description: description || null,
-      paymentMethod: pm,
+      paymentMethod: activeType === 'BANK_TRANSFER' ? 'CASH' : pm,
       category: (req.body.category || null)
     };
 

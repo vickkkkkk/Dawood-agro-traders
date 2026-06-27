@@ -31,6 +31,7 @@ const Input = forwardRef(({
           id={id}
           type={type}
           disabled={disabled}
+          step={type === 'number' ? (props.step !== undefined ? props.step : 'any') : undefined}
           className={`
             form-input-premium
             ${Icon ? 'has-icon' : ''}
