@@ -74,6 +74,7 @@ const CashManagement = () => {
     totalInflows: 0, 
     totalOutflows: 0, 
     totalBankTransferred: 0,
+    totalInitialLiabilities: 0,
     totalLiabilities: 0,
     totalPaidLiabilities: 0,
     totalRemainingLiabilities: 0
@@ -309,7 +310,7 @@ const CashManagement = () => {
             <h3 className="text-xl font-extrabold text-white tracking-tight">
               {summaryLoading ? '...' : formatCurrency(summary.totalLiabilities)}
             </h3>
-            <p className="text-[9px] text-slate-400 font-medium mt-1">Total credit purchases</p>
+            <p className="text-[9px] text-slate-400 font-medium mt-1">Outstanding supplier balance</p>
           </div>
         </div>
 
@@ -332,16 +333,16 @@ const CashManagement = () => {
         {/* Card 5: Total Remaining Liabilities */}
         <div className="glass-card stat-card relative overflow-hidden flex flex-col justify-between p-5 rounded-2xl bg-gradient-to-br from-rose-500/10 to-red-500/5 border border-rose-500/20 shadow-md">
           <div className="flex justify-between items-center mb-4">
-            <span className="text-xs font-bold uppercase tracking-wider text-rose-400 font-sans">Total Remaining</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-rose-400 font-sans">Total Credit Purchases</span>
             <div className="p-2 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20">
               <TrendingDown size={18} />
             </div>
           </div>
           <div>
             <h3 className="text-xl font-extrabold text-white tracking-tight">
-              {summaryLoading ? '...' : formatCurrency(summary.totalRemainingLiabilities)}
+              {summaryLoading ? '...' : formatCurrency(summary.totalInitialLiabilities)}
             </h3>
-            <p className="text-[9px] text-slate-400 font-medium mt-1">Active supplier balances</p>
+            <p className="text-[9px] text-slate-400 font-medium mt-1">Total initial credit purchases</p>
           </div>
         </div>
 

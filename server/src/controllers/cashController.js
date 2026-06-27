@@ -110,7 +110,7 @@ export const getBalances = async () => {
     }
   });
 
-  const totalLiabilities = liabilitiesAgg._sum.totalAmount || 0;
+  const totalInitial = liabilitiesAgg._sum.totalAmount || 0;
   const totalPaid = liabilitiesAgg._sum.paidAmount || 0;
   const totalRemaining = liabilitiesAgg._sum.remainingBalance || 0;
 
@@ -125,7 +125,8 @@ export const getBalances = async () => {
     totalInflows: posCashInflow + creditCashInflow + manualInflow + manualBankInflow,
     totalOutflows: totalOut,
     totalBankTransferred,
-    totalLiabilities,
+    totalInitialLiabilities: totalInitial,
+    totalLiabilities: totalRemaining,
     totalPaidLiabilities: totalPaid,
     totalRemainingLiabilities: totalRemaining
   };
