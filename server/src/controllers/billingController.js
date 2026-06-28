@@ -454,49 +454,31 @@ export const returnBillItem = async (req, res, next) => {
       let newCreditAmount = Number(bill.creditAmount);
 
       if (bill.paymentMethod === 'CREDIT') {
-         if (newCreditAmount >= refundAmount) {
-           newCreditAmount -= refundAmount;
+         // Do not touch Cash or Online (newAmountPaid remains unchanged).
+         // Adjust the bill's creditAmount.
+         newCreditAmount = newTotal - newAmountPaid;
+
+         if (bill.customerId) {
+           await tx.customer.update({
+             where: { id: bill.customerId },
+             data: { creditBalance: { decrement: refundAmount } }
+           });
            
-           if (bill.customerId) {
-             await tx.customer.update({
-               where: { id: bill.customerId },
-               data: { creditBalance: { decrement: refundAmount } }
-             });
-             
-             await tx.creditTransaction.create({
-               data: {
-                 customerId: bill.customerId,
-                 billId: bill.id,
-                 type: 'PAYMENT', 
-                 amount: refundAmount,
-                 description: `Item return adj. - Bill ${bill.billNo}`,
-                 transactionDate: new Date(),
-               }
-             });
-           }
-         } else {
-           const remainder = refundAmount - newCreditAmount;
-           if (bill.customerId && newCreditAmount > 0) {
-             await tx.customer.update({
-               where: { id: bill.customerId },
-               data: { creditBalance: { decrement: newCreditAmount } }
-             });
-             await tx.creditTransaction.create({
-               data: {
-                 customerId: bill.customerId,
-                 billId: bill.id,
-                 type: 'PAYMENT',
-                 amount: newCreditAmount,
-                 description: `Item return adj. - Bill ${bill.billNo}`,
-                 transactionDate: new Date(),
-               }
-             });
-           }
-           newCreditAmount = 0;
-           newAmountPaid = Math.max(0, newAmountPaid - remainder);
+           await tx.creditTransaction.create({
+             data: {
+               customerId: bill.customerId,
+               billId: bill.id,
+               type: 'RETURN', 
+               amount: refundAmount,
+               description: `Item return adj. - Bill ${bill.billNo}`,
+               transactionDate: new Date(),
+             }
+           });
          }
       } else {
+         // CASH or Online - deduct refundAmount directly from amountPaid.
          newAmountPaid = Math.max(0, newAmountPaid - refundAmount);
+         newCreditAmount = 0;
       }
 
       const updatedBill = await tx.bill.update({

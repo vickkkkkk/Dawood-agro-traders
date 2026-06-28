@@ -631,14 +631,16 @@ const CreditLedger = () => {
                                  ? 'CREDIT' 
                                  : tx.type === 'PAYBACK'
                                    ? 'CASH BACK'
-                                   : (PAYMENT_METHOD_LABELS[tx.paymentMethod] || tx.paymentMethod || 'Cash')}
+                                   : tx.type === 'RETURN'
+                                     ? 'RETURN ADJ'
+                                     : (PAYMENT_METHOD_LABELS[tx.paymentMethod] || tx.paymentMethod || 'Cash')}
                              </Badge>
                            </td>
                            <td className="px-6 py-3.5 text-right font-semibold text-red-400">
                              {(tx.type === 'CREDIT' || tx.type === 'PAYBACK') ? formatCurrency(tx.amount) : ''}
                            </td>
                            <td className="px-6 py-3.5 text-right font-semibold text-emerald-400">
-                             {tx.type === 'PAYMENT' ? formatCurrency(tx.amount) : ''}
+                             {(tx.type === 'PAYMENT' || tx.type === 'RETURN') ? formatCurrency(tx.amount) : ''}
                            </td>
                            <td className="px-6 py-3.5 text-center no-print">
                              <Button
@@ -948,36 +950,36 @@ const CreditLedger = () => {
                   <p className="text-[10px] text-gray-600">Jatoi Road Near Zrai Bank Shah Jamal</p>
                   <p className="text-[10px] text-gray-600">Phone: 0340-0736201, 0302-7338805</p>
                   <p className="text-[10px] font-mono mt-2 text-gray-700">
-                    {selectedTxForPrint.type === 'PAYBACK' ? `REFUND NO: REF-${selectedTxForPrint.id}` : `RECEIPT NO: REC-${selectedTxForPrint.id}`}
-                  </p>
-                  <p className="text-[9px] text-gray-500">Date: {new Date(selectedTxForPrint.transactionDate).toLocaleString('en-PK')}</p>
-                </div>
-
-                <div className="space-y-1 mb-4 border-b border-dashed border-gray-400 pb-3 text-gray-900 text-left">
-                  <p><span className="font-semibold text-gray-700">Customer Name:</span> {selectedCustomerName || 'N/A'}</p>
-                  <p><span className="font-semibold text-gray-700">
-                    {selectedTxForPrint.type === 'PAYBACK' ? 'Refund Method:' : 'Payment Method:'}
-                  </span> {PAYMENT_METHOD_LABELS[selectedTxForPrint.paymentMethod] || selectedTxForPrint.paymentMethod || 'Cash'}</p>
-                  <p><span className="font-semibold text-gray-700">Description:</span> {selectedTxForPrint.description || (selectedTxForPrint.type === 'PAYBACK' ? 'Advance Payment Refund' : 'Credit Recovery Payment')}</p>
-                </div>
-
-                <div className="space-y-2.5 font-medium mt-4 text-gray-900">
-                  <div className="flex justify-between text-sm font-bold text-black border-b border-gray-300 pb-1">
-                    <span>
-                      {selectedTxForPrint.type === 'PAYBACK' ? 'Amount Refunded:' : 'Amount Recovered:'}
-                    </span>
-                    <span>Rs. {parseFloat(selectedTxForPrint.amount).toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between text-xs text-gray-600 pt-1">
-                    <span>{parseFloat(selectedCustomerDetails.creditBalance || 0) < 0 ? 'Remaining Advance:' : 'Remaining Udhar Balance:'}</span>
-                    <span className="font-bold">Rs. {Math.abs(parseFloat(selectedCustomerDetails.creditBalance || 0)).toLocaleString()}</span>
-                  </div>
-                </div>
-
-                <div className="text-center space-y-1 mt-6 pt-3 border-t border-dashed border-gray-400">
-                  <p className="text-[10px] font-semibold text-gray-700">
-                    {selectedTxForPrint.type === 'PAYBACK' ? 'Refund processed successfully.' : 'Thank you for your payment!'}
-                  </p>
+                     {selectedTxForPrint.type === 'PAYBACK' ? `REFUND NO: REF-${selectedTxForPrint.id}` : selectedTxForPrint.type === 'RETURN' ? `RETURN NO: RET-${selectedTxForPrint.id}` : `RECEIPT NO: REC-${selectedTxForPrint.id}`}
+                   </p>
+                   <p className="text-[9px] text-gray-500">Date: {new Date(selectedTxForPrint.transactionDate).toLocaleString('en-PK')}</p>
+                 </div>
+ 
+                 <div className="space-y-1 mb-4 border-b border-dashed border-gray-400 pb-3 text-gray-900 text-left">
+                   <p><span className="font-semibold text-gray-700">Customer Name:</span> {selectedCustomerName || 'N/A'}</p>
+                   <p><span className="font-semibold text-gray-700">
+                     {selectedTxForPrint.type === 'PAYBACK' ? 'Refund Method:' : selectedTxForPrint.type === 'RETURN' ? 'Adjustment Type:' : 'Payment Method:'}
+                   </span> {selectedTxForPrint.type === 'RETURN' ? 'Return Adjustment' : (PAYMENT_METHOD_LABELS[selectedTxForPrint.paymentMethod] || selectedTxForPrint.paymentMethod || 'Cash')}</p>
+                   <p><span className="font-semibold text-gray-700">Description:</span> {selectedTxForPrint.description || (selectedTxForPrint.type === 'PAYBACK' ? 'Advance Payment Refund' : selectedTxForPrint.type === 'RETURN' ? 'Item return adjustment' : 'Credit Recovery Payment')}</p>
+                 </div>
+ 
+                 <div className="space-y-2.5 font-medium mt-4 text-gray-900">
+                   <div className="flex justify-between text-sm font-bold text-black border-b border-gray-300 pb-1">
+                     <span>
+                       {selectedTxForPrint.type === 'PAYBACK' ? 'Amount Refunded:' : selectedTxForPrint.type === 'RETURN' ? 'Return Value:' : 'Amount Recovered:'}
+                     </span>
+                     <span>Rs. {parseFloat(selectedTxForPrint.amount).toLocaleString()}</span>
+                   </div>
+                   <div className="flex justify-between text-xs text-gray-600 pt-1">
+                     <span>{parseFloat(selectedCustomerDetails.creditBalance || 0) < 0 ? 'Remaining Advance:' : 'Remaining Udhar Balance:'}</span>
+                     <span className="font-bold">Rs. {Math.abs(parseFloat(selectedCustomerDetails.creditBalance || 0)).toLocaleString()}</span>
+                   </div>
+                 </div>
+ 
+                 <div className="text-center space-y-1 mt-6 pt-3 border-t border-dashed border-gray-400">
+                   <p className="text-[10px] font-semibold text-gray-700">
+                     {selectedTxForPrint.type === 'PAYBACK' ? 'Refund processed successfully.' : selectedTxForPrint.type === 'RETURN' ? 'Return adjustment recorded.' : 'Thank you for your payment!'}
+                   </p>
                 </div>
               </div>
 
