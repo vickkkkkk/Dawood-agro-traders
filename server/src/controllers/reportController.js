@@ -84,80 +84,8 @@ export const getDashboard = async (req, res, next) => {
 
     const billCount = periodBills.length;
 
-    // Fetch CreditTransaction PAYMENT and PAYBACK records in the period.
-    const creditTxActivity = await prisma.creditTransaction.findMany({
-      where: {
-        type: { in: ['PAYMENT', 'PAYBACK'] },
-        transactionDate: { gte: periodStart, lte: periodEnd },
-      },
-      select: { id: true, customerId: true, type: true, amount: true, paymentMethod: true, transactionDate: true },
-    });
-
-    const activeCustomerIds = [...new Set(creditTxActivity.map(tx => tx.customerId).filter(Boolean))];
-    let customerTransactions = [];
-    if (activeCustomerIds.length > 0) {
-      customerTransactions = await prisma.creditTransaction.findMany({
-        where: {
-          customerId: { in: activeCustomerIds },
-          transactionDate: { lte: periodEnd },
-        },
-        orderBy: [
-          { transactionDate: 'asc' },
-          { id: 'asc' },
-        ],
-      });
-    }
-
-    const txByCustomer = {};
-    for (const tx of customerTransactions) {
-      if (!txByCustomer[tx.customerId]) {
-        txByCustomer[tx.customerId] = [];
-      }
-      txByCustomer[tx.customerId].push(tx);
-    }
-
-    let cashFromCreditTx = 0;
-    let onlineFromCreditTx = 0;
-
-    for (const customerId of activeCustomerIds) {
-      const txs = txByCustomer[customerId] || [];
-      let balance = 0;
-
-      for (const tx of txs) {
-        const isWithinPeriod = tx.transactionDate >= periodStart && tx.transactionDate <= periodEnd;
-        const amount = Number(tx.amount);
-        const type = tx.type;
-
-        if (type === 'CREDIT') {
-          balance += amount;
-        } else if (type === 'PAYBACK') {
-          balance += amount;
-        } else if (type === 'PAYMENT') {
-          const balanceBefore = balance;
-          balance -= amount;
-
-          if (isWithinPeriod) {
-            const isOnline = ['JAZZCASH', 'EASYPAISA', 'BANK_TRANSFER'].includes(
-              tx.paymentMethod?.toUpperCase()
-            );
-
-            let recAmt = 0;
-            if (balanceBefore > 0) {
-              recAmt = Math.min(amount, balanceBefore);
-            }
-
-            if (isOnline) {
-              onlineFromCreditTx += recAmt;
-            } else {
-              cashFromCreditTx += recAmt;
-            }
-          }
-        }
-      }
-    }
-
-    const cashPayments = cashPaymentsFromBills + cashFromCreditTx;
-    const onlinePayments = onlinePaymentsFromBills + onlineFromCreditTx;
+    const cashPayments = cashPaymentsFromBills;
+    const onlinePayments = onlinePaymentsFromBills;
     const totalSales = cashPayments + onlinePayments + creditPayments;
 
     let totalCreditConsume = 0;
@@ -523,12 +451,12 @@ export const getDailySales = async (req, res, next) => {
             }
 
             if (isOnline) {
-              dailyMap[dateKey].online += recAmt;
+              // Online recovery does not affect online sales or total sales metrics
             } else {
               dailyMap[dateKey].receive += recAmt;
               dailyMap[dateKey].advance += advAmt;
             }
-            dailyMap[dateKey].total += recAmt;
+            // Do not add credit recovery payments to total sales metric
           }
         }
       }
