@@ -95,13 +95,39 @@ export const createProduct = async (req, res, next) => {
     } = req.body;
 
     const product = await prisma.$transaction(async (tx) => {
+      let finalCategoryId = categoryId ? Number(categoryId) : null;
+      if (!finalCategoryId) {
+        let generalCategory = await tx.category.findFirst({
+          where: { name: 'General' }
+        });
+        if (!generalCategory) {
+          generalCategory = await tx.category.create({
+            data: { name: 'General', description: 'Default category for products' }
+          });
+        }
+        finalCategoryId = generalCategory.id;
+      }
+
+      let finalSku = sku;
+      if (!finalSku) {
+        const cleanName = name
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/(^-|-$)/g, '');
+        finalSku = `${cleanName || 'prod'}-${Math.floor(1000 + Math.random() * 9000)}`;
+      }
+
+      const finalPurchasePrice = purchasePrice !== undefined && purchasePrice !== null && purchasePrice !== '' ? Number(purchasePrice) : 0;
+      const finalSalePrice = salePrice !== undefined && salePrice !== null && salePrice !== '' ? Number(salePrice) : 0;
+
       const created = await tx.product.create({
         data: {
           name,
-          sku,
-          categoryId: Number(categoryId),
-          purchasePrice: Number(purchasePrice),
-          salePrice: Number(salePrice),
+          sku: finalSku,
+          categoryId: Number(finalCategoryId),
+          purchasePrice: finalPurchasePrice,
+          salePrice: finalSalePrice,
           stockQty: Number(stockQty),
           unit,
           lowStockAlert: Number(lowStockAlert),
@@ -192,9 +218,8 @@ export const updateProduct = async (req, res, next) => {
     const updateData = {};
     if (name !== undefined) updateData.name = name;
     if (sku !== undefined) updateData.sku = sku;
-    if (categoryId !== undefined) updateData.categoryId = Number(categoryId);
-    if (purchasePrice !== undefined) updateData.purchasePrice = Number(purchasePrice);
-    if (salePrice !== undefined) updateData.salePrice = Number(salePrice);
+    if (purchasePrice !== undefined) updateData.purchasePrice = purchasePrice !== '' ? Number(purchasePrice) : 0;
+    if (salePrice !== undefined) updateData.salePrice = salePrice !== '' ? Number(salePrice) : 0;
     if (stockQty !== undefined) updateData.stockQty = Number(stockQty);
     if (unit !== undefined) updateData.unit = unit;
     if (lowStockAlert !== undefined) updateData.lowStockAlert = Number(lowStockAlert);
@@ -202,9 +227,25 @@ export const updateProduct = async (req, res, next) => {
     if (batchNo !== undefined) updateData.batchNo = batchNo || null;
 
     const product = await prisma.$transaction(async (tx) => {
+      let finalCategoryId = categoryId !== undefined ? (categoryId ? Number(categoryId) : null) : undefined;
+      if (finalCategoryId === null) {
+        let generalCategory = await tx.category.findFirst({
+          where: { name: 'General' }
+        });
+        if (!generalCategory) {
+          generalCategory = await tx.category.create({
+            data: { name: 'General', description: 'Default category for products' }
+          });
+        }
+        finalCategoryId = generalCategory.id;
+      }
+
       const updated = await tx.product.update({
         where: { id: Number(id) },
-        data: updateData,
+        data: {
+          ...updateData,
+          ...(finalCategoryId !== undefined ? { categoryId: Number(finalCategoryId) } : {})
+        },
         include: {
           category: { select: { id: true, name: true } },
         },

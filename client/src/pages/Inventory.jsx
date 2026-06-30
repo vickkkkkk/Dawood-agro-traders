@@ -195,53 +195,35 @@ const Inventory = () => {
       }
     }
     if (field === 'sku') {
-      if (!value) {
-        errs.sku = 'SKU is required';
-      } else {
-        delete errs.sku;
-      }
+      delete errs.sku;
     }
     if (field === 'categoryId') {
-      if (!value) {
-        errs.categoryId = 'Please select a category';
-      } else {
-        delete errs.categoryId;
-      }
+      delete errs.categoryId;
     }
     if (field === 'stockQty') {
-      if (value === '') {
-        errs.stockQty = 'Stock quantity is required';
-      } else if (parseFloat(value) < 0) {
+      if (value !== '' && parseFloat(value) < 0) {
         errs.stockQty = 'Stock cannot be negative';
       } else {
         delete errs.stockQty;
       }
     }
     if (field === 'lowStockAlert') {
-      if (value === '') {
-        errs.lowStockAlert = 'Low stock alert level is required';
-      } else if (parseFloat(value) < 0) {
+      if (value !== '' && parseFloat(value) < 0) {
         errs.lowStockAlert = 'Alert level cannot be negative';
       } else {
         delete errs.lowStockAlert;
       }
     }
     if (field === 'purchasePrice') {
-      if (value === '') {
-        errs.purchasePrice = 'Purchase price is required';
-      } else if (parseFloat(value) <= 0) {
-        errs.purchasePrice = 'Purchase price must be greater than 0';
+      if (value !== '' && parseFloat(value) < 0) {
+        errs.purchasePrice = 'Purchase price cannot be negative';
       } else {
         delete errs.purchasePrice;
       }
     }
     if (field === 'salePrice') {
-      if (value === '') {
-        errs.salePrice = 'Sale price is required';
-      } else if (parseFloat(value) <= 0) {
-        errs.salePrice = 'Sale price must be greater than 0';
-      } else if (purchasePrice && parseFloat(value) < parseFloat(purchasePrice)) {
-        errs.salePrice = 'Sale price should not be less than purchase price';
+      if (value !== '' && parseFloat(value) < 0) {
+        errs.salePrice = 'Sale price cannot be negative';
       } else {
         delete errs.salePrice;
       }
@@ -301,12 +283,12 @@ const Inventory = () => {
 
     // Run all validations
     const nameErr = !name ? 'Product name is required' : name.trim().length < 3 ? 'Product name must be at least 3 characters' : null;
-    const skuErr = editingProduct && !finalSku ? 'SKU / Barcode is required' : null;
-    const categoryErr = !categoryId ? 'Category is required' : null;
-    const stockErr = stockQty === '' ? 'Stock quantity is required' : parseFloat(stockQty) < 0 ? 'Stock cannot be negative' : null;
-    const alertErr = lowStockAlert === '' ? 'Low stock alert is required' : parseFloat(lowStockAlert) < 0 ? 'Alert level cannot be negative' : null;
-    const purchaseErr = !purchasePrice ? 'Purchase price is required' : parseFloat(purchasePrice) <= 0 ? 'Purchase price must be greater than 0' : null;
-    const saleErr = !salePrice ? 'Sale price is required' : parseFloat(salePrice) <= 0 ? 'Sale price must be greater than 0' : purchasePrice && parseFloat(salePrice) < parseFloat(purchasePrice) ? 'Sale price should not be less than purchase price' : null;
+    const skuErr = null;
+    const categoryErr = null;
+    const stockErr = stockQty !== '' && parseFloat(stockQty) < 0 ? 'Stock cannot be negative' : null;
+    const alertErr = lowStockAlert !== '' && parseFloat(lowStockAlert) < 0 ? 'Alert level cannot be negative' : null;
+    const purchaseErr = purchasePrice !== '' && parseFloat(purchasePrice) < 0 ? 'Purchase price cannot be negative' : null;
+    const saleErr = salePrice !== '' && parseFloat(salePrice) < 0 ? 'Sale price cannot be negative' : null;
 
     if (nameErr || skuErr || categoryErr || stockErr || alertErr || purchaseErr || saleErr) {
       setErrors({
@@ -326,13 +308,13 @@ const Inventory = () => {
     const payload = {
       name,
       sku: finalSku,
-      categoryId: parseInt(categoryId),
-      purchasePrice: parseFloat(purchasePrice),
-      salePrice: parseFloat(salePrice),
-      stockQty: parseFloat(stockQty || 0),
-      unit,
-      lowStockAlert: parseFloat(lowStockAlert),
-      expiryDate: expiryDate ? new Date(expiryDate).toISOString() : null,
+      categoryId: categoryId ? parseInt(categoryId) : null,
+      purchasePrice: purchasePrice !== '' ? parseFloat(purchasePrice) : 0,
+      salePrice: salePrice !== '' ? parseFloat(salePrice) : 0,
+      stockQty: stockQty !== '' ? parseFloat(stockQty) : 0,
+      unit: unit || 'bags',
+      lowStockAlert: lowStockAlert !== '' ? parseFloat(lowStockAlert) : 10,
+      expiryDate: expiryDate || null,
       batchNo: batchNo || null
     };
 
@@ -579,8 +561,7 @@ const Inventory = () => {
 
             <Select
               id="prod-category"
-              label="Category *"
-              required
+              label="Category"
               icon={Tag}
               options={categoryOptions}
               value={categoryId}
@@ -592,9 +573,8 @@ const Inventory = () => {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Input
                 id="prod-stock-qty"
-                label="Stock Quantity *"
+                label="Stock Quantity"
                 type="number"
-                required
                 icon={Layers}
                 placeholder="Initial stock qty..."
                 value={stockQty}
@@ -605,8 +585,7 @@ const Inventory = () => {
 
               <Select
                 id="prod-unit"
-                label="Unit *"
-                required
+                label="Unit"
                 icon={Layers}
                 options={[
                   { value: 'bags', label: 'Bags' },
@@ -620,9 +599,8 @@ const Inventory = () => {
 
               <Input
                 id="prod-low-alert"
-                label="Low Stock Alert *"
+                label="Low Stock Alert"
                 type="number"
-                required
                 icon={AlertTriangle}
                 placeholder="Alert level..."
                 value={lowStockAlert}
@@ -635,9 +613,8 @@ const Inventory = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input
                 id="prod-purchase-price"
-                label="Purchase Price (PKR) *"
+                label="Purchase Price (PKR)"
                 type="number"
-                required
                 icon={DollarSign}
                 iconColor="text-rose-400"
                 placeholder="Price paid to supplier..."
@@ -649,9 +626,8 @@ const Inventory = () => {
 
               <Input
                 id="prod-sale-price"
-                label="Sale Price (PKR) *"
+                label="Sale Price (PKR)"
                 type="number"
-                required
                 icon={DollarSign}
                 iconColor="text-emerald-400"
                 placeholder="Price charged to customers..."
