@@ -10,6 +10,7 @@ import {
   getPurchases, createPurchase, getPurchaseById,
   getSuppliers, createSupplier, updateSupplier 
 } from '../api/purchases';
+import { createPurchaseReturn } from '../api/returns';
 import { getProducts } from '../api/inventory';
 import Card from '../components/ui/Card';
 import Table from '../components/ui/Table';
@@ -63,6 +64,15 @@ const Purchases = () => {
   const [supAddress, setSupAddress] = useState('');
   const [supErrors, setSupErrors] = useState({});
 
+  // Purchase Return States
+  const [showPurReturnModal, setShowPurReturnModal] = useState(false);
+  const [selectedPurReturnItem, setSelectedPurReturnItem] = useState(null);
+  const [isFullPurReturn, setIsFullPurReturn] = useState(false);
+  const [purReturnQuantity, setPurReturnQuantity] = useState('');
+  const [purReturnReason, setPurReturnReason] = useState('damaged');
+  const [purReturnReasonDetails, setPurReturnReasonDetails] = useState('');
+  const [purReturnRefundMethod, setPurReturnRefundMethod] = useState('CASH');
+
   // Fetch Purchases
   const { data: purchasesData, isLoading: purchasesLoading, isFetching: purchasesFetching } = useQuery({
     queryKey: ['purchases', search],
@@ -103,6 +113,86 @@ const Purchases = () => {
       toast.error(err?.response?.data?.message || 'Failed to record purchase. Verify cash limits.');
     }
   });
+
+  // Purchase Return Mutation
+  const purchaseReturnMutation = useMutation({
+    mutationFn: createPurchaseReturn,
+    onSuccess: () => {
+      toast.success('Purchase return processed successfully!');
+      queryClient.invalidateQueries(['purchases']);
+      queryClient.invalidateQueries(['products']);
+      queryClient.invalidateQueries(['cash-summary']);
+      queryClient.invalidateQueries(['cash-ledger']);
+      queryClient.invalidateQueries(['liabilities']);
+      queryClient.invalidateQueries(['dashboard']);
+      setShowViewModal(false);
+      setShowPurReturnModal(false);
+      setSelectedPurReturnItem(null);
+      setIsFullPurReturn(false);
+      setPurReturnQuantity('');
+      setPurReturnReason('damaged');
+      setPurReturnReasonDetails('');
+      setPurReturnRefundMethod('CASH');
+    },
+    onError: (err) => {
+      toast.error(err?.response?.data?.message || 'Failed to process purchase return');
+    }
+  });
+
+  const handlePurReturnConfirm = () => {
+    if (isFullPurReturn) {
+      const itemsToReturn = selectedPurchase.items.map(item => ({
+        purchaseItemId: item.id,
+        quantity: Number(item.quantity) - Number(item.returnedQuantity || 0)
+      })).filter(item => item.quantity > 0);
+
+      if (itemsToReturn.length === 0) {
+        return toast.error('No items available to return in this purchase.');
+      }
+
+      purchaseReturnMutation.mutate({
+        purchaseId: selectedPurchase.id,
+        reason: purReturnReason,
+        reasonDetails: purReturnReasonDetails,
+        refundMethod: purReturnRefundMethod,
+        items: itemsToReturn
+      });
+    } else {
+      if (!selectedPurReturnItem || !purReturnQuantity || Number(purReturnQuantity) <= 0) {
+        return toast.error('Please enter a valid quantity to return.');
+      }
+      const maxQty = Number(selectedPurReturnItem.quantity) - Number(selectedPurReturnItem.returnedQuantity || 0);
+      if (Number(purReturnQuantity) > maxQty) {
+        return toast.error(`Cannot return more than available (${maxQty}).`);
+      }
+      purchaseReturnMutation.mutate({
+        purchaseId: selectedPurchase.id,
+        reason: purReturnReason,
+        reasonDetails: purReturnReasonDetails,
+        refundMethod: purReturnRefundMethod,
+        items: [
+          {
+            purchaseItemId: selectedPurReturnItem.id,
+            quantity: Number(purReturnQuantity)
+          }
+        ]
+      });
+    }
+  };
+
+  const handleReturnFullPurchaseInit = () => {
+    setIsFullPurReturn(true);
+    setSelectedPurReturnItem({ product: { name: 'Full GRN' } });
+    setPurReturnQuantity('0');
+    if (selectedPurchase.paymentMethod === 'LIABILITY') {
+      setPurReturnRefundMethod('CREDIT');
+    } else {
+      setPurReturnRefundMethod('CASH');
+    }
+    setPurReturnReason('damaged');
+    setPurReturnReasonDetails('');
+    setShowPurReturnModal(true);
+  };
 
   const createSupplierMutation = useMutation({
     mutationFn: createSupplier,
@@ -957,7 +1047,6 @@ const Purchases = () => {
               </div>
             )}
 
-            {/* Items Table */}
             <div className="space-y-2">
               <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Item Details</p>
               <div className="overflow-x-auto">
@@ -969,29 +1058,61 @@ const Purchases = () => {
                       <th className="py-2 text-right">Purchase Price</th>
                       <th className="py-2 text-right">Sale Price</th>
                       <th className="py-2 text-right">Total Price</th>
+                      <th className="py-2 text-right no-print">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
-                    {selectedPurchase.items?.map((item, idx) => (
-                      <tr key={idx} className="hover:bg-white/[0.01]">
-                        <td className="py-2.5 font-medium text-white">
-                          {item.product?.name || `Product #${item.productId}`}
-                          {item.batchNo && <span className="block text-[10px] text-slate-500">Batch: {item.batchNo} {item.expiryDate && `| Expiry: ${formatDate(item.expiryDate)}`}</span>}
-                        </td>
-                        <td className="py-2.5 text-right text-slate-300">
-                          {item.quantity} {item.product?.unit || 'bags'}
-                        </td>
-                        <td className="py-2.5 text-right text-slate-300">
-                          {formatCurrency(item.unitPrice)}
-                        </td>
-                        <td className="py-2.5 text-right text-emerald-400">
-                          {formatCurrency(item.salePrice || 0)}
-                        </td>
-                        <td className="py-2.5 text-right font-semibold text-white">
-                          {formatCurrency(parseFloat(item.quantity) * parseFloat(item.unitPrice))}
-                        </td>
-                      </tr>
-                    ))}
+                    {selectedPurchase.items?.map((item, idx) => {
+                      const availableToReturn = Number(item.quantity) - Number(item.returnedQuantity || 0);
+                      return (
+                        <tr key={idx} className="hover:bg-white/[0.01]">
+                          <td className="py-2.5 font-medium text-white text-left font-sans">
+                            <div>{item.product?.name || `Product #${item.productId}`}</div>
+                            {item.batchNo && <span className="block text-[10px] text-slate-500 mt-0.5">Batch: {item.batchNo} {item.expiryDate && `| Expiry: ${formatDate(item.expiryDate)}`}</span>}
+                            {parseFloat(item.returnedQuantity || 0) > 0 && (
+                              <span className="text-[10px] font-semibold text-red-400 block mt-0.5">
+                                (Returned: {parseFloat(item.returnedQuantity)})
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2.5 text-right text-slate-300">
+                            {item.quantity} {item.product?.unit || 'bags'}
+                          </td>
+                          <td className="py-2.5 text-right text-slate-300">
+                            {formatCurrency(item.unitPrice)}
+                          </td>
+                          <td className="py-2.5 text-right text-emerald-400">
+                            {formatCurrency(item.salePrice || 0)}
+                          </td>
+                          <td className="py-2.5 text-right font-semibold text-white">
+                            {formatCurrency(parseFloat(item.quantity) * parseFloat(item.unitPrice))}
+                          </td>
+                          <td className="py-2.5 text-right no-print">
+                            {availableToReturn > 0 ? (
+                              <button
+                                type="button"
+                                className="text-red-400 hover:text-red-500 hover:underline font-bold text-[10px] cursor-pointer transition-colors"
+                                onClick={() => {
+                                  setSelectedPurReturnItem(item);
+                                  setIsFullPurReturn(false);
+                                  setPurReturnQuantity(String(availableToReturn));
+                                  if (selectedPurchase.paymentMethod === 'LIABILITY') {
+                                    setPurReturnRefundMethod('CREDIT');
+                                  } else {
+                                    setPurReturnRefundMethod('CASH');
+                                  }
+                                  setShowPurReturnModal(true);
+                                }}
+                              >
+                                Return
+                              </button>
+                            ) : (
+                              <span className="text-slate-500 text-[10px]">Returned</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1019,6 +1140,148 @@ const Purchases = () => {
 
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="secondary" onClick={() => setShowViewModal(false)}>Close</Button>
+              {selectedPurchase.status === 'RECEIVED' && (
+                <Button
+                  variant="danger"
+                  onClick={handleReturnFullPurchaseInit}
+                >
+                  Return Entire GRN
+                </Button>
+              )}
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Return Purchase Item Modal */}
+      {showPurReturnModal && selectedPurReturnItem && (
+        <Modal
+          id="return-purchase-modal-direct"
+          title={isFullPurReturn ? `Return Entire GRN: ${selectedPurchase.grnNo}` : `Return Purchase Item: ${selectedPurReturnItem.product?.name || 'Product'}`}
+          onClose={() => {
+            setShowPurReturnModal(false);
+            setSelectedPurReturnItem(null);
+            setIsFullPurReturn(false);
+            setPurReturnQuantity('');
+          }}
+        >
+          <div className="space-y-4 text-left">
+            <p className="text-sm text-slate-300 font-sans">
+              {isFullPurReturn 
+                ? `You are returning all remaining items in this GRN back to the supplier. This will adjust outstanding liabilities.` 
+                : `Please enter the quantity of ${selectedPurReturnItem.product?.name} you want to return to the supplier.`}
+            </p>
+            
+            {!isFullPurReturn && (
+              <div className="bg-white/5 p-3 rounded-lg text-xs space-y-1 font-sans">
+                <div className="flex justify-between">
+                  <span className="text-slate-400 font-bold">Original Quantity:</span>
+                  <span className="text-white font-bold">{parseFloat(selectedPurReturnItem.quantity)} {selectedPurReturnItem.product?.unit || 'bags'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400 font-bold">Already Returned:</span>
+                  <span className="text-amber-400 font-bold">{parseFloat(selectedPurReturnItem.returnedQuantity || 0)} {selectedPurReturnItem.product?.unit || 'bags'}</span>
+                </div>
+                <div className="flex justify-between border-t border-white/5 pt-1 mt-1 font-bold">
+                  <span className="text-slate-300">Max Returnable:</span>
+                  <span className="text-emerald-400">
+                    {parseFloat(selectedPurReturnItem.quantity) - parseFloat(selectedPurReturnItem.returnedQuantity || 0)} {selectedPurReturnItem.product?.unit || 'bags'}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {!isFullPurReturn && (
+              <div>
+                <label htmlFor="pur-return-qty-direct" className="block text-xs font-bold text-slate-400 mb-1">
+                  Quantity to Return
+                </label>
+                <Input
+                  id="pur-return-qty-direct"
+                  type="number"
+                  step="any"
+                  min="0.01"
+                  max={parseFloat(selectedPurReturnItem.quantity) - parseFloat(selectedPurReturnItem.returnedQuantity || 0)}
+                  placeholder="Enter return quantity..."
+                  value={purReturnQuantity}
+                  onChange={(e) => setPurReturnQuantity(e.target.value)}
+                  className="pos-filter-input w-full text-white"
+                />
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="pur-return-reason-direct" className="block text-xs font-bold text-slate-400 mb-1 font-sans">
+                  Reason for Return *
+                </label>
+                <Select
+                  id="pur-return-reason-direct"
+                  options={[
+                    { value: 'damaged', label: 'Damaged' },
+                    { value: 'wrong item', label: 'Wrong Item' },
+                    { value: 'customer cancelled', label: 'Customer Cancelled' },
+                    { value: 'quality issue', label: 'Quality Issue' },
+                    { value: 'other', label: 'Other' },
+                  ]}
+                  value={purReturnReason}
+                  onChange={(e) => setPurReturnReason(e.target.value)}
+                  className="pos-filter-input w-full bg-slate-900 border-white/10"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="pur-return-refund-direct" className="block text-xs font-bold text-slate-400 mb-1 font-sans">
+                  Refund Method *
+                </label>
+                <Select
+                  id="pur-return-refund-direct"
+                  options={[
+                    { value: 'CASH', label: 'Cash Refund' },
+                    { value: 'CREDIT', label: 'Supplier Account Credit (Liability Adj.)' },
+                    { value: 'ONLINE', label: 'Online / Bank' },
+                    { value: 'NONE', label: 'No Refund (Exchange)' },
+                  ]}
+                  value={purReturnRefundMethod}
+                  onChange={(e) => setPurReturnRefundMethod(e.target.value)}
+                  className="pos-filter-input w-full bg-slate-900 border-white/10"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="pur-return-details-direct" className="block text-xs font-bold text-slate-400 mb-1 font-sans">
+                Remarks / Details
+              </label>
+              <textarea
+                id="pur-return-details-direct"
+                placeholder="Enter remarks..."
+                value={purReturnReasonDetails}
+                onChange={(e) => setPurReturnReasonDetails(e.target.value)}
+                rows={2}
+                className="w-full bg-slate-800 border border-white/10 rounded-xl p-3 text-white text-xs focus:outline-none focus:border-emerald-500 font-sans"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setShowPurReturnModal(false);
+                  setSelectedPurReturnItem(null);
+                  setIsFullPurReturn(false);
+                  setPurReturnQuantity('');
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handlePurReturnConfirm}
+                loading={purchaseReturnMutation.isPending}
+              >
+                Confirm Return
+              </Button>
             </div>
           </div>
         </Modal>
