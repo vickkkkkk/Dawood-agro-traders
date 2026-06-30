@@ -25,15 +25,14 @@ router.get('/:id', authorize('ADMIN', 'MANAGER'), getReturnRecordById);
 router.post(
   '/sales',
   authorize('ADMIN', 'MANAGER', 'CASHIER'),
-  [
+  validate([
     body('billId').isInt().withMessage('Bill ID is required.'),
     body('refundMethod').isIn(['CASH', 'CREDIT', 'ONLINE', 'NONE']).withMessage('Invalid refund method.'),
     body('reason').isIn(['damaged', 'wrong item', 'customer cancelled', 'quality issue', 'other']).withMessage('Invalid reason.'),
     body('items').isArray({ min: 1 }).withMessage('At least one item to return is required.'),
     body('items.*.billItemId').isInt().withMessage('Valid bill item ID is required for each item.'),
     body('items.*.quantity').isFloat({ min: 0.01 }).withMessage('Return quantity must be greater than 0.'),
-  ],
-  validate,
+  ]),
   createSaleReturn
 );
 
@@ -41,15 +40,14 @@ router.post(
 router.post(
   '/purchases',
   authorize('ADMIN', 'MANAGER'),
-  [
+  validate([
     body('purchaseId').isInt().withMessage('Purchase ID is required.'),
     body('refundMethod').isIn(['CASH', 'CREDIT', 'ONLINE', 'NONE']).withMessage('Invalid refund method.'),
     body('reason').isIn(['damaged', 'wrong item', 'customer cancelled', 'quality issue', 'other']).withMessage('Invalid reason.'),
     body('items').isArray({ min: 1 }).withMessage('At least one item to return is required.'),
     body('items.*.purchaseItemId').isInt().withMessage('Valid purchase item ID is required for each item.'),
     body('items.*.quantity').isFloat({ min: 0.01 }).withMessage('Return quantity must be greater than 0.'),
-  ],
-  validate,
+  ]),
   createPurchaseReturn
 );
 

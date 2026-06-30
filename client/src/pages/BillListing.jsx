@@ -102,6 +102,7 @@ const BillListing = () => {
         queryClient.invalidateQueries(['bill-details', selectedBill.id]);
       }
       setShowReturnModal(false);
+      setShowReturnItemsModal(false);
       setSelectedReturnItem(null);
       setIsFullBillReturn(false);
       setReturnQuantity('');
@@ -758,10 +759,14 @@ const BillListing = () => {
                                       return toast.error(`Maximum returnable quantity is ${availableToReturn}`);
                                     }
                                     setSelectedReturnItem(item);
-                                    returnItemMutation.mutate({
-                                      billItemId: item.id,
-                                      quantity: parseFloat(inputVal)
-                                    });
+                                    setIsFullBillReturn(false);
+                                    setReturnQuantity(inputVal);
+                                    if (selectedBillDetails.paymentMethod === 'CREDIT') {
+                                      setReturnRefundMethod('CREDIT');
+                                    } else {
+                                      setReturnRefundMethod('CASH');
+                                    }
+                                    setShowReturnModal(true);
                                   }}
                                 >
                                   Return
