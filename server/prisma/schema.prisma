@@ -18,6 +18,7 @@ model User {
   updatedAt DateTime @updatedAt
 
   bills Bill[]
+  returnRecords ReturnRecord[]
 
   @@map("users")
 }
@@ -66,6 +67,7 @@ model Supplier {
 
   purchases Purchase[]
   liabilities Liability[]
+  returnRecords ReturnRecord[]
 
   @@map("suppliers")
 }
@@ -81,6 +83,7 @@ model Customer {
 
   bills              Bill[]
   creditTransactions CreditTransaction[]
+  returnRecords      ReturnRecord[]
 
   @@map("customers")
 }
@@ -133,6 +136,7 @@ model Purchase {
   userId                 Int
   total                  Float          // Items total cost
   status                 String         @default("RECEIVED") // RECEIVED, PENDING
+  hasReturns             Boolean        @default(false)
   purchaseDate           DateTime       @default(now())
   createdAt              DateTime       @default(now())
 
@@ -158,6 +162,7 @@ model PurchaseItem {
   purchaseId Int
   productId  Int
   quantity   Float
+  returnedQuantity Float @default(0)
   unitPrice  Float     // Cost price
   total      Float
   salePrice  Float     @default(0) // Selling price (for margin tracking)
@@ -242,5 +247,47 @@ model CashTransaction {
   updatedAt        DateTime @updatedAt
 
   @@map("cash_transactions")
+}
+
+model ReturnRecord {
+  id            Int                @id @default(autoincrement())
+  returnNo      String             @unique
+  returnDate    DateTime           @default(now())
+  type          String             // SALE, PURCHASE
+  subType       String             // FULL, PARTIAL
+  referenceNo   String             // Original Bill.billNo or Purchase.grnNo
+  billId        Int?
+  purchaseId    Int?
+  customerId    Int?
+  supplierId    Int?
+  reason        String?
+  reasonDetails String?
+  refundMethod  String             // CASH, CREDIT, ONLINE, NONE
+  netAmount     Float
+  userId        Int
+
+  customer      Customer?          @relation(fields: [customerId], references: [id])
+  supplier      Supplier?          @relation(fields: [supplierId], references: [id])
+  user          User               @relation(fields: [userId], references: [id])
+  items         ReturnRecordItem[]
+
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@map("return_records")
+}
+
+model ReturnRecordItem {
+  id             Int          @id @default(autoincrement())
+  returnRecordId Int
+  productId      Int
+  productName    String
+  quantity       Float
+  unitPrice      Float
+  total          Float
+
+  returnRecord   ReturnRecord @relation(fields: [returnRecordId], references: [id], onDelete: Cascade)
+
+  @@map("return_record_items")
 }
 

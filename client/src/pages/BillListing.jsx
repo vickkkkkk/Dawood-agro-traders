@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
 import { Search, Eye, Printer, Calendar, RefreshCw, XCircle, CreditCard, RotateCcw } from 'lucide-react';
 import { getBills, getBillById, voidBill, returnBillItem } from '../api/billing';
+import { createSaleReturn } from '../api/returns';
 import { useAuth } from '../context/AuthContext';
 import Card from '../components/ui/Card';
 import Table from '../components/ui/Table';
@@ -36,7 +37,11 @@ const BillListing = () => {
   // Return Item state
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [selectedReturnItem, setSelectedReturnItem] = useState(null);
+  const [isFullBillReturn, setIsFullBillReturn] = useState(false);
   const [returnQuantity, setReturnQuantity] = useState('');
+  const [returnReason, setReturnReason] = useState('damaged');
+  const [returnReasonDetails, setReturnReasonDetails] = useState('');
+  const [returnRefundMethod, setReturnRefundMethod] = useState('CASH');
   const [showReturnItemsModal, setShowReturnItemsModal] = useState(false);
 
   // Fetch full details of the selected bill (including items)
@@ -87,9 +92,9 @@ const BillListing = () => {
   };
 
   const returnItemMutation = useMutation({
-    mutationFn: (payload) => returnBillItem(selectedBill.id, payload),
+    mutationFn: createSaleReturn,
     onSuccess: (res) => {
-      toast.success('Item returned successfully!');
+      toast.success('Return processed successfully!');
       queryClient.invalidateQueries(['bills']);
       queryClient.invalidateQueries(['dashboard']);
       queryClient.invalidateQueries(['products']);
@@ -98,29 +103,68 @@ const BillListing = () => {
       }
       setShowReturnModal(false);
       setSelectedReturnItem(null);
+      setIsFullBillReturn(false);
       setReturnQuantity('');
-      // Update selected bill in view modal with the new data
-      if (res.data) {
-        setSelectedBill(res.data);
-      }
+      setReturnReason('damaged');
+      setReturnReasonDetails('');
+      setReturnRefundMethod('CASH');
     },
     onError: (err) => {
-      toast.error(err?.response?.data?.message || 'Failed to return item');
+      toast.error(err?.response?.data?.message || 'Failed to process return');
     }
   });
 
   const handleReturnConfirm = () => {
-    if (!selectedReturnItem || !returnQuantity || Number(returnQuantity) <= 0) {
-      return toast.error('Please enter a valid quantity to return.');
+    if (isFullBillReturn) {
+      const itemsToReturn = selectedBillDetails.items.map(item => ({
+        billItemId: item.id,
+        quantity: Number(item.quantity) - Number(item.returnedQuantity || 0)
+      })).filter(item => item.quantity > 0);
+
+      if (itemsToReturn.length === 0) {
+        return toast.error('No items available to return in this bill.');
+      }
+
+      returnItemMutation.mutate({
+        billId: selectedBill.id,
+        reason: returnReason,
+        reasonDetails: returnReasonDetails,
+        refundMethod: returnRefundMethod,
+        items: itemsToReturn
+      });
+    } else {
+      if (!selectedReturnItem || !returnQuantity || Number(returnQuantity) <= 0) {
+        return toast.error('Please enter a valid quantity to return.');
+      }
+      const maxQty = Number(selectedReturnItem.quantity) - Number(selectedReturnItem.returnedQuantity || 0);
+      if (Number(returnQuantity) > maxQty) {
+        return toast.error(`Cannot return more than available (${maxQty}).`);
+      }
+      returnItemMutation.mutate({
+        billId: selectedBill.id,
+        reason: returnReason,
+        reasonDetails: returnReasonDetails,
+        refundMethod: returnRefundMethod,
+        items: [
+          {
+            billItemId: selectedReturnItem.id,
+            quantity: Number(returnQuantity)
+          }
+        ]
+      });
     }
-    const maxQty = Number(selectedReturnItem.quantity) - Number(selectedReturnItem.returnedQuantity || 0);
-    if (Number(returnQuantity) > maxQty) {
-      return toast.error(`Cannot return more than available (${maxQty}).`);
+  };
+
+  const handleReturnFullBillInit = () => {
+    setIsFullBillReturn(true);
+    setSelectedReturnItem({ product: { name: 'Full Invoice' } });
+    setReturnQuantity('0');
+    if (selectedBillDetails.paymentMethod === 'CREDIT') {
+      setReturnRefundMethod('CREDIT');
+    } else {
+      setReturnRefundMethod('CASH');
     }
-    returnItemMutation.mutate({
-      billItemId: selectedReturnItem.id,
-      quantity: Number(returnQuantity)
-    });
+    setShowReturnModal(true);
   };
 
   const handlePrint = () => {
@@ -383,6 +427,13 @@ const BillListing = () => {
                                   className="text-emerald-600 hover:text-emerald-700 hover:underline font-bold text-[10px] ml-2 cursor-pointer transition-colors"
                                   onClick={() => {
                                     setSelectedReturnItem(item);
+                                    setIsFullBillReturn(false);
+                                    setReturnQuantity(String(availableToReturn));
+                                    if (selectedBillDetails.paymentMethod === 'CREDIT') {
+                                      setReturnRefundMethod('CREDIT');
+                                    } else {
+                                      setReturnRefundMethod('CASH');
+                                    }
                                     setShowReturnModal(true);
                                   }}
                                 >
@@ -439,6 +490,14 @@ const BillListing = () => {
 
               <div className="flex justify-end gap-2">
                 <Button variant="secondary" onClick={() => setShowViewModal(false)}>Close</Button>
+                {(hasRole('ADMIN') || hasRole('MANAGER')) && !selectedBillDetails.isVoid && (
+                  <Button
+                    variant="danger"
+                    onClick={handleReturnFullBillInit}
+                  >
+                    Return Entire Bill
+                  </Button>
+                )}
                 <Button variant="primary" icon={Printer} onClick={handlePrint}>Print Invoice</Button>
               </div>
             </div>
@@ -480,47 +539,108 @@ const BillListing = () => {
       {showReturnModal && selectedReturnItem && (
         <Modal
           id="return-item-modal"
-          title={`Return Item: ${selectedReturnItem.product?.name || 'Product'}`}
+          title={isFullBillReturn ? `Return Entire Bill: ${selectedBillDetails.billNo}` : `Return Item: ${selectedReturnItem.product?.name || 'Product'}`}
           onClose={() => {
             setShowReturnModal(false);
             setSelectedReturnItem(null);
+            setIsFullBillReturn(false);
             setReturnQuantity('');
           }}
         >
           <div className="space-y-4">
             <p className="text-sm text-slate-300">
-              Please enter the quantity of <strong className="text-white">{selectedReturnItem.product?.name}</strong> you want to return.
+              {isFullBillReturn 
+                ? `You are returning all remaining items in this invoice. This will refund/adjust the total values.` 
+                : `Please enter the quantity of ${selectedReturnItem.product?.name} you want to return.`}
             </p>
-            <div className="bg-white/5 p-3 rounded-lg text-xs space-y-1">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Original Quantity:</span>
-                <span className="text-white font-semibold">{parseFloat(selectedReturnItem.quantity)} {selectedReturnItem.product?.unit || 'bags'}</span>
+            
+            {!isFullBillReturn && (
+              <div className="bg-white/5 p-3 rounded-lg text-xs space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Original Quantity:</span>
+                  <span className="text-white font-semibold">{parseFloat(selectedReturnItem.quantity)} {selectedReturnItem.product?.unit || 'bags'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Already Returned:</span>
+                  <span className="text-amber-400 font-semibold">{parseFloat(selectedReturnItem.returnedQuantity || 0)} {selectedReturnItem.product?.unit || 'bags'}</span>
+                </div>
+                <div className="flex justify-between border-t border-white/5 pt-1 mt-1 font-medium">
+                  <span className="text-slate-300">Max Returnable:</span>
+                  <span className="text-emerald-400 font-semibold">
+                    {parseFloat(selectedReturnItem.quantity) - parseFloat(selectedReturnItem.returnedQuantity || 0)} {selectedReturnItem.product?.unit || 'bags'}
+                  </span>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Already Returned:</span>
-                <span className="text-amber-400 font-semibold">{parseFloat(selectedReturnItem.returnedQuantity || 0)} {selectedReturnItem.product?.unit || 'bags'}</span>
+            )}
+
+            {!isFullBillReturn && (
+              <div>
+                <label htmlFor="return-quantity-input" className="block text-xs font-medium text-slate-400 mb-1">
+                  Quantity to Return
+                </label>
+                <Input
+                  id="return-quantity-input"
+                  type="number"
+                  step="any"
+                  min="0.01"
+                  max={parseFloat(selectedReturnItem.quantity) - parseFloat(selectedReturnItem.returnedQuantity || 0)}
+                  placeholder="Enter return quantity..."
+                  value={returnQuantity}
+                  onChange={(e) => setReturnQuantity(e.target.value)}
+                  className="pos-filter-input w-full"
+                />
               </div>
-              <div className="flex justify-between border-t border-white/5 pt-1 mt-1 font-medium">
-                <span className="text-slate-300">Max Returnable:</span>
-                <span className="text-emerald-400 font-semibold">
-                  {parseFloat(selectedReturnItem.quantity) - parseFloat(selectedReturnItem.returnedQuantity || 0)} {selectedReturnItem.product?.unit || 'bags'}
-                </span>
+            )}
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="return-reason-select" className="block text-xs font-medium text-slate-400 mb-1">
+                  Reason for Return *
+                </label>
+                <Select
+                  id="return-reason-select"
+                  options={[
+                    { value: 'damaged', label: 'Damaged' },
+                    { value: 'wrong item', label: 'Wrong Item' },
+                    { value: 'customer cancelled', label: 'Customer Cancelled' },
+                    { value: 'quality issue', label: 'Quality Issue' },
+                    { value: 'other', label: 'Other' },
+                  ]}
+                  value={returnReason}
+                  onChange={(e) => setReturnReason(e.target.value)}
+                  className="pos-filter-input w-full bg-slate-900 border-white/10"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="return-refund-method" className="block text-xs font-medium text-slate-400 mb-1">
+                  Refund Method *
+                </label>
+                <Select
+                  id="return-refund-method"
+                  options={[
+                    { value: 'CASH', label: 'Cash Refund' },
+                    { value: 'CREDIT', label: 'Account Credit (Udhar Adj.)' },
+                    { value: 'ONLINE', label: 'Online / Bank' },
+                    { value: 'NONE', label: 'No Refund (Exchange)' },
+                  ]}
+                  value={returnRefundMethod}
+                  onChange={(e) => setReturnRefundMethod(e.target.value)}
+                  className="pos-filter-input w-full bg-slate-900 border-white/10"
+                />
               </div>
             </div>
 
             <div>
-              <label htmlFor="return-quantity-input" className="block text-xs font-medium text-slate-400 mb-1">
-                Quantity to Return
+              <label htmlFor="return-reason-details" className="block text-xs font-medium text-slate-400 mb-1">
+                Reason Details / Remarks
               </label>
               <Input
-                id="return-quantity-input"
-                type="number"
-                step="any"
-                min="0.01"
-                max={parseFloat(selectedReturnItem.quantity) - parseFloat(selectedReturnItem.returnedQuantity || 0)}
-                placeholder="Enter return quantity..."
-                value={returnQuantity}
-                onChange={(e) => setReturnQuantity(e.target.value)}
+                id="return-reason-details"
+                type="text"
+                placeholder="e.g. Broken packaging, wrong product size..."
+                value={returnReasonDetails}
+                onChange={(e) => setReturnReasonDetails(e.target.value)}
                 className="pos-filter-input w-full"
               />
             </div>
@@ -531,6 +651,7 @@ const BillListing = () => {
                 onClick={() => {
                   setShowReturnModal(false);
                   setSelectedReturnItem(null);
+                  setIsFullBillReturn(false);
                   setReturnQuantity('');
                 }}
               >

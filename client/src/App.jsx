@@ -22,6 +22,8 @@ import PurchaseLedgerDetail from './pages/PurchaseLedgerDetail';
 import SalesLedger from './pages/SalesLedger';
 import SalesLedgerDetail from './pages/SalesLedgerDetail';
 import CashManagement from './pages/CashManagement';
+import SaleReturnLedger from './pages/SaleReturnLedger';
+import PurchaseReturnLedger from './pages/PurchaseReturnLedger';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -58,6 +60,8 @@ function App() {
                   <Route path="/purchase-ledger/:productId" element={<PurchaseLedgerDetail />} />
                   <Route path="/sales-ledger" element={<SalesLedger />} />
                   <Route path="/sales-ledger/:productId" element={<SalesLedgerDetail />} />
+                  <Route path="/sale-returns" element={<SaleReturnLedger />} />
+                  <Route path="/purchase-returns" element={<PurchaseReturnLedger />} />
                 </Route>
 
                 {/* All Roles */}

@@ -81,7 +81,9 @@ export const NAV_ITEMS = [
   { path: '/credits', label: 'Credit Ledger', icon: 'BookOpen', roles: ['ADMIN', 'MANAGER'] },
   { path: '/cash-management', label: 'Cash Management', icon: 'Wallet', roles: ['ADMIN', 'MANAGER'] },
   { path: '/purchase-ledger', label: 'Purchase Ledger', icon: 'FileSpreadsheet', roles: ['ADMIN', 'MANAGER'] },
+  { path: '/purchase-returns', label: 'Purchase Return Ledger', icon: 'RotateCcw', roles: ['ADMIN', 'MANAGER'] },
   { path: '/sales-ledger', label: 'Sales Ledger', icon: 'TrendingUp', roles: ['ADMIN', 'MANAGER'] },
+  { path: '/sale-returns', label: 'Sale Return Ledger', icon: 'RotateCcw', roles: ['ADMIN', 'MANAGER'] },
   { path: '/users', label: 'User Management', icon: 'UserCog', roles: ['ADMIN'] },
 ];
 
