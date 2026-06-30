@@ -1138,17 +1138,31 @@ const Purchases = () => {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="secondary" onClick={() => setShowViewModal(false)}>Close</Button>
-              {selectedPurchase.status === 'RECEIVED' && (
-                <Button
-                  variant="danger"
-                  onClick={handleReturnFullPurchaseInit}
-                >
-                  Return Entire GRN
-                </Button>
-              )}
-            </div>
+            {(() => {
+              const totalAvailableToReturn = selectedPurchase.items?.reduce(
+                (sum, item) => sum + (Number(item.quantity) - Number(item.returnedQuantity || 0)), 
+                0
+              ) || 0;
+              return (
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="secondary" onClick={() => setShowViewModal(false)}>Close</Button>
+                  {selectedPurchase.status === 'RECEIVED' && (
+                    totalAvailableToReturn > 0 ? (
+                      <Button
+                        variant="danger"
+                        onClick={handleReturnFullPurchaseInit}
+                      >
+                        Return Entire GRN
+                      </Button>
+                    ) : (
+                      <span className="text-slate-500 text-xs font-bold px-3 py-2 bg-white/5 rounded-lg border border-white/5 select-none font-sans">
+                        Entire GRN Returned
+                      </span>
+                    )
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </Modal>
       )}
